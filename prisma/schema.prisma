@@ -1,0 +1,107 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ==========================================
+// ENUMS — Order Source, Order Status, Process Status
+// ==========================================
+
+enum OrderSource {
+  BF // ByteForge Website / Shopify Orders
+  WA // WhatsApp Orders
+  RM // Manual / Retail / Direct Orders
+}
+
+enum OrderStatus {
+  PENDING
+  CONFIRMED
+  CANCELLED
+}
+
+enum ProcessStatus {
+  UNSHIPPED
+  READY_TO_SHIP
+  SHIPPED
+  DELIVERED
+  RETURNED
+}
+
+// ==========================================
+// MODELS
+// ==========================================
+
+model User {
+  id        String   @id @default(uuid())
+  name      String
+  email     String   @unique
+  password  String
+  createdAt DateTime @default(now())
+}
+
+model Order {
+  id                String        @id @default(uuid())
+  source            OrderSource   @default(BF)
+  customer          String
+  phone             String
+  product           String
+  quantity          Int           @default(1)
+  amount            Float
+  status            OrderStatus   @default(PENDING)
+  processStatus     ProcessStatus @default(UNSHIPPED)
+  notes             String?
+  shopifyOrderId    String?       @unique
+  orderNumber       Int?
+  orderName         String?
+  customerEmail     String?
+  address1          String?
+  address2          String?
+  city              String?
+  province          String?
+  zip               String?
+  country           String?
+  shopifyCustomerId String?
+  trackingNumber    String?
+  courierName       String?
+  createdAt         DateTime      @default(now())
+  updatedAt         DateTime      @default(now()) @updatedAt
+
+  @@index([source])
+  @@index([status])
+  @@index([processStatus])
+  @@index([phone])
+  @@index([customer])
+  @@index([createdAt])
+  @@index([orderNumber])
+}
+
+model Template {
+  id          String       @id @default(uuid())
+  name        String
+  content     String
+  automations Automation[]
+  createdAt   DateTime     @default(now())
+  updatedAt   DateTime     @updatedAt
+}
+
+model Automation {
+  id          String    @id @default(uuid())
+  trigger     String    @unique // e.g. "ORDER_CREATED", "ORDER_CONFIRMED", etc.
+  isEnabled   Boolean   @default(false)
+  templateId  String?
+  template    Template? @relation(fields: [templateId], references: [id], onDelete: SetNull)
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+}
+
+model Settings {
+  id             String   @id @default(uuid())
+  whatsappNumber String?
+  isConnected    Boolean  @default(false)
+  lastSync       DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+}
