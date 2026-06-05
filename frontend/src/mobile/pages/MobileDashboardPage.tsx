@@ -1,4 +1,5 @@
 "use client"
+import { API_BASE_URL } from "@/shared/config/api"
 
 import * as React from "react"
 import { Card, CardContent, CardHeader, CardTitle } from "@/shared/components/ui/card"
@@ -12,8 +13,8 @@ export default function MobileDashboardPage() {
   const fetchDashboardData = async () => {
     try {
       const [statsRes, activityRes] = await Promise.all([
-        fetch("http://localhost:5000/dashboard/stats"),
-        fetch("http://localhost:5000/activity")
+        fetch(`${API_BASE_URL}/dashboard/stats`),
+        fetch(`${API_BASE_URL}/activity`)
       ])
       
       if (statsRes.ok) {

@@ -23,7 +23,7 @@ import {
   ExternalLink
 } from "lucide-react"
 
-const API_BASE_URL = "http://localhost:5000"
+import { API_BASE_URL } from "@/shared/config/api";
 
 export default function MobileWhatsAppPage() {
   const [activeTab, setActiveTab] = useState<"templates" | "automations" | "preview">("templates")

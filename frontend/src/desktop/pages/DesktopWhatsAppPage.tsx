@@ -27,7 +27,7 @@ import { Button } from "@/shared/components/ui/button"
 import { Textarea } from "@/shared/components/ui/textarea"
 import { Input } from "@/shared/components/ui/input"
 
-const API_BASE_URL = "http://localhost:5000"
+import { API_BASE_URL } from "@/shared/config/api";
 
 export default function WhatsAppPage() {
   const [activeTab, setActiveTab] = useState<"templates" | "automations">("templates")

@@ -1,4 +1,5 @@
 "use client"
+import { API_BASE_URL } from "@/shared/config/api"
 
 import * as React from "react"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/shared/components/ui/card"
@@ -31,10 +32,10 @@ export default function AnalyticsPage() {
   const fetchDashboardData = async () => {
     try {
       const [statsRes, analyticsRes, productsRes, customersRes] = await Promise.all([
-        fetch("http://localhost:5000/dashboard/stats"),
-        fetch("http://localhost:5000/analytics"),
-        fetch("http://localhost:5000/analytics/products"),
-        fetch("http://localhost:5000/analytics/customers")
+        fetch(`${API_BASE_URL}/dashboard/stats`),
+        fetch(`${API_BASE_URL}/analytics`),
+        fetch(`${API_BASE_URL}/analytics/products`),
+        fetch(`${API_BASE_URL}/analytics/customers`)
       ])
       
       if (statsRes.ok) {

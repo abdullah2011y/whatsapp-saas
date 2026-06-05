@@ -1,4 +1,5 @@
 "use client"
+import { API_BASE_URL } from "@/shared/config/api"
 
 import { useState } from "react"
 import { motion } from "framer-motion"
@@ -21,7 +22,7 @@ export default function DesktopLoginPage() {
     setError("")
     setIsLoading(true)
     try {
-      const res = await fetch("http://localhost:5000/auth/login", {
+      const res = await fetch(`${API_BASE_URL}/auth/login`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ email, password }),

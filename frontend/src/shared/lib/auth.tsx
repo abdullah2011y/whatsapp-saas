@@ -1,4 +1,5 @@
 "use client"
+import { API_BASE_URL } from "@/shared/config/api"
 
 import { createContext, useContext, useEffect, useState, ReactNode } from "react"
 import { useRouter } from "next/navigation"
@@ -36,7 +37,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       const storedToken = localStorage.getItem("token")
       if (storedToken) {
         try {
-          const res = await fetch("http://localhost:5000/auth/me", {
+          const res = await fetch(`${API_BASE_URL}/auth/me`, {
             headers: { Authorization: `Bearer ${storedToken}` }
           })
           if (res.ok) {

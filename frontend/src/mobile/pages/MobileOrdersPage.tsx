@@ -1,4 +1,5 @@
 "use client"
+import { API_BASE_URL } from "@/shared/config/api"
 
 import * as React from "react"
 import { Card } from "@/shared/components/ui/card"
@@ -30,8 +31,8 @@ export default function MobileOrdersPage() {
   const fetchOrders = async (query?: string) => {
     try {
       const url = query 
-        ? `http://localhost:5000/orders?search=${encodeURIComponent(query)}`
-        : "http://localhost:5000/orders"
+        ? `${API_BASE_URL}/orders?search=${encodeURIComponent(query)}`
+        : `${API_BASE_URL}/orders`
       const res = await fetch(url)
       if (res.ok) {
         const data = await res.json()
@@ -56,7 +57,7 @@ export default function MobileOrdersPage() {
     setSelectedOrderId(id)
     setLoadingDetails(true)
     try {
-      const res = await fetch(`http://localhost:5000/orders/${id}`)
+      const res = await fetch(`${API_BASE_URL}/orders/${id}`)
       if (res.ok) {
         const data = await res.json()
         setSelectedOrderDetails(data)
@@ -79,7 +80,7 @@ export default function MobileOrdersPage() {
     if (!selectedOrderDetails) return
     setIsSavingDetails(true)
     try {
-      const res = await fetch(`http://localhost:5000/orders/${selectedOrderDetails.id}/status`, {
+      const res = await fetch(`${API_BASE_URL}/orders/${selectedOrderDetails.id}/status`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
