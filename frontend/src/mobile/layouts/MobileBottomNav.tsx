@@ -2,11 +2,19 @@
 
 import Link from "next/link"
 import { usePathname } from "next/navigation"
-import { Home, ShoppingCart, MessageCircle, BarChart3, Users, Plus, Lock } from "lucide-react"
+import { Home, ShoppingCart, MessageCircle, BarChart3, Users, Plus, Lock, LucideIcon } from "lucide-react"
 import { WHATSAPP_MODULE_ENABLED } from "@/shared/config/features"
 import * as React from "react"
 
-const tabs = [
+interface MobileTabItem {
+  name: string
+  href: string
+  icon: LucideIcon
+  isFab?: boolean
+  isComingSoon?: boolean
+}
+
+const tabs: MobileTabItem[] = [
   { name: "Home", href: "/", icon: Home },
   { name: "Orders", href: "/orders", icon: ShoppingCart },
   { name: "WhatsApp", href: "/whatsapp", icon: MessageCircle, isFab: true },

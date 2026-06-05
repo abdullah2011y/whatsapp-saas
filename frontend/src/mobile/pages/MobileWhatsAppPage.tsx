@@ -62,12 +62,6 @@ export default function MobileWhatsAppPage() {
     courier_name: "Stark Cargo"
   }
 
-  useEffect(() => {
-    fetchStatus()
-    fetchTemplates()
-    fetchAutomations()
-  }, [])
-
   const fetchStatus = async () => {
     setIsSyncing(true)
     try {
@@ -131,6 +125,12 @@ export default function MobileWhatsAppPage() {
       console.error(error)
     }
   }
+
+  useEffect(() => {
+    fetchStatus()
+    fetchTemplates()
+    fetchAutomations()
+  }, [])
 
   const saveTemplate = async () => {
     if (!activeTemplate.name.trim()) {

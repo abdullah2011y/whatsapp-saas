@@ -66,19 +66,6 @@ export default function WhatsAppPage() {
     courier_name: "Wayne Logistics"
   }
 
-  useEffect(() => {
-    fetchStatus()
-    fetchTemplates()
-    fetchAutomations()
-
-    // Auto-poll status every 12 seconds
-    const intervalId = setInterval(() => {
-      fetchStatus()
-    }, 12000)
-
-    return () => clearInterval(intervalId)
-  }, [])
-
   const fetchStatus = async () => {
     setIsSyncing(true)
     try {
@@ -143,6 +130,19 @@ export default function WhatsAppPage() {
       console.error("Error fetching automations:", error)
     }
   }
+
+  useEffect(() => {
+    fetchStatus()
+    fetchTemplates()
+    fetchAutomations()
+
+    // Auto-poll status every 12 seconds
+    const intervalId = setInterval(() => {
+      fetchStatus()
+    }, 12000)
+
+    return () => clearInterval(intervalId)
+  }, [])
 
   const saveTemplate = async () => {
     if (!activeTemplate.name.trim()) {
