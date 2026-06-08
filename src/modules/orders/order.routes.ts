@@ -1,4 +1,5 @@
 import { Router } from "express";
+import { authMiddleware } from "../auth/auth.middleware";
 import {
   createOrderHandler,
   getOrdersHandler,
@@ -8,9 +9,12 @@ import {
 
 const router = Router();
 
-router.post("/", createOrderHandler);
-router.get("/", getOrdersHandler);          // ✅ ye line honi chahiye
-router.get("/:id", getOrderByIdHandler);
-router.patch("/:id/status", updateStatusHandler);
+// Protect all order routes
+router.use(authMiddleware as any);
+
+router.post("/", createOrderHandler as any);
+router.get("/", getOrdersHandler as any);
+router.get("/:id", getOrderByIdHandler as any);
+router.patch("/:id/status", updateStatusHandler as any);
 
 export default router;

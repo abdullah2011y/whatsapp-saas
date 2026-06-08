@@ -36,15 +36,23 @@ enum ProcessStatus {
 // ==========================================
 
 model User {
-  id        String   @id @default(uuid())
-  name      String
-  email     String   @unique
-  password  String
-  createdAt DateTime @default(now())
+  id               String            @id @default(uuid())
+  name             String
+  email            String            @unique
+  password         String
+  createdAt        DateTime          @default(now())
+  settings         Settings?
+  whatsappSession  WhatsappSession?
+  templates        Template[]
+  automations      Automation[]
+  orders           Order[]
+  whatsappPolls    WhatsappPoll[]
 }
 
 model Order {
   id                String        @id @default(uuid())
+  userId            String?
+  user              User?         @relation(fields: [userId], references: [id], onDelete: Cascade)
   source            OrderSource   @default(BF)
   customer          String
   phone             String
@@ -81,6 +89,8 @@ model Order {
 
 model Template {
   id          String       @id @default(uuid())
+  userId      String?
+  user        User?        @relation(fields: [userId], references: [id], onDelete: Cascade)
   name        String
   content     String
   automations Automation[]
@@ -90,18 +100,64 @@ model Template {
 
 model Automation {
   id          String    @id @default(uuid())
-  trigger     String    @unique // e.g. "ORDER_CREATED", "ORDER_CONFIRMED", etc.
+  userId      String?
+  user        User?        @relation(fields: [userId], references: [id], onDelete: Cascade)
+  trigger     String    // e.g. "ORDER_CREATED", "ORDER_CONFIRMED", etc.
   isEnabled   Boolean   @default(false)
   templateId  String?
   template    Template? @relation(fields: [templateId], references: [id], onDelete: SetNull)
   createdAt   DateTime  @default(now())
   updatedAt   DateTime  @updatedAt
+
+  @@unique([userId, trigger])
 }
 
 model Settings {
-  id             String   @id @default(uuid())
-  whatsappNumber String?
-  isConnected    Boolean  @default(false)
-  lastSync       DateTime @default(now())
-  updatedAt      DateTime @updatedAt
+  id                     String   @id @default(uuid())
+  userId                 String   @unique
+  user                   User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  whatsappNumber         String?
+  isConnected            Boolean  @default(false)
+  lastSync               DateTime @default(now())
+  updatedAt              DateTime @updatedAt
+  
+  enabledProviders       String   @default("BOTH") // "META", "WEB", "BOTH"
+  defaultProvider        String   @default("ASK")  // "META", "WEB", "ASK"
+  
+  // Meta Configuration
+  metaBusinessAccountId String?
+  metaPhoneNumberId     String?
+  metaAccessToken       String?  // Encrypted
+  metaVerifyToken       String?
+  metaConnected         Boolean  @default(false)
+  shopifyDomain         String?
+  
+  // Poll & Method Settings
+  confirmationMethod     String   @default("BUTTONS") // "BUTTONS", "POLLS", "CUSTOM"
+  pollConfirmLabel       String   @default("✅ Yes Confirmed")
+  pollCancelLabel        String   @default("❌ No Cancelled")
+  createdAt              DateTime @default(now())
+}
+
+model WhatsappSession {
+  id             String    @id @default(uuid())
+  userId         String    @unique
+  user           User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  phoneNumber    String?
+  connected      Boolean   @default(false)
+  lastSync       DateTime?
+  sessionHealth  String    @default("Healthy") // Healthy, Unhealthy, N/A
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
+}
+
+model WhatsappPoll {
+  id            String   @id @default(uuid())
+  messageId     String   @unique
+  orderId       String
+  userId        String
+  user          User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  optionsJson   String   // JSON string storing choice configurations
+  messageSecret String   // Cryptographic base64 message secret for decrypting poll votes
+  createdAt     DateTime @default(now())
 }

@@ -1,24 +1,30 @@
-import { Router, Request, Response } from "express";
+import { Router, Response } from "express";
+import { authMiddleware, AuthenticatedRequest } from "../auth/auth.middleware";
 import { getAutomations, updateAutomation } from "./automation.service";
 
 const router = Router();
 
-router.get("/", async (_: Request, res: Response) => {
+// Protect all automation routes
+router.use(authMiddleware as any);
+
+router.get("/", async (req: AuthenticatedRequest, res: Response) => {
   try {
-    const automations = await getAutomations();
+    const userId = req.user?.id!;
+    const automations = await getAutomations(userId);
     res.json(automations);
   } catch (error: any) {
     res.status(500).json({ error: error.message });
   }
 });
 
-router.post("/", async (req: Request, res: Response) => {
+router.post("/", async (req: AuthenticatedRequest, res: Response) => {
   try {
+    const userId = req.user?.id!;
     const { trigger, isEnabled, templateId } = req.body;
     if (!trigger) {
       return res.status(400).json({ error: "Missing trigger type" });
     }
-    const automation = await updateAutomation(trigger, !!isEnabled, templateId || null);
+    const automation = await updateAutomation(userId, trigger, !!isEnabled, templateId || null);
     res.json(automation);
   } catch (error: any) {
     res.status(500).json({ error: error.message });

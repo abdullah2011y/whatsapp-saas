@@ -6,11 +6,12 @@ export const webhookHandler = async (req: Request, res: Response) => {
     console.log("[Shopify Webhook] Shopify order received. Payload ID:", req.body.id);
 
     const topic = req.headers["x-shopify-topic"];
-    console.log(`[Shopify Webhook] Topic: ${topic || 'unknown'}`);
+    const shopDomain = req.headers["x-shopify-shop-domain"] as string | undefined;
+    console.log(`[Shopify Webhook] Topic: ${topic || 'unknown'}, Shop: ${shopDomain || 'unknown'}`);
 
     // Process if it's an order creation webhook or if it has an order ID (for local testing)
     if (topic === "orders/create" || req.body.id) {
-      await handleShopifyOrderCreate(req.body);
+      await handleShopifyOrderCreate(req.body, shopDomain);
     } else {
       console.log("[Shopify Webhook] Ignored payload (not an order creation or missing ID).");
     }

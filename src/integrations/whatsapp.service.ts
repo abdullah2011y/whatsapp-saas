@@ -1,9 +1,35 @@
 import axios from "axios";
+import { PrismaClient } from "@prisma/client";
+import { decrypt } from "../shared/lib/crypto";
+
+const prisma = new PrismaClient();
+const DEFAULT_USER_ID = "97e2acb1-0bee-4b31-be9e-3e31f8b4a916";
+
+const getMetaCredentials = async (userId: string) => {
+  const settings = await prisma.settings.findUnique({
+    where: { userId }
+  });
+
+  const token = settings?.metaAccessToken 
+    ? decrypt(settings.metaAccessToken) 
+    : process.env.WHATSAPP_TOKEN;
+  const phoneNumberId = settings?.metaPhoneNumberId || process.env.WHATSAPP_PHONE_NUMBER_ID;
+
+  return { token, phoneNumberId };
+};
 
 export const sendOrderMessage = async (order: any) => {
   try {
+    const userId = order.userId || DEFAULT_USER_ID;
+    const { token, phoneNumberId } = await getMetaCredentials(userId);
+
+    if (!token || !phoneNumberId) {
+      console.error("[WhatsApp Service] Missing Meta credentials for user", userId);
+      return;
+    }
+
     await axios.post(
-      `https://graph.facebook.com/v22.0/${process.env.WHATSAPP_PHONE_NUMBER_ID}/messages`,
+      `https://graph.facebook.com/v22.0/${phoneNumberId}/messages`,
       {
         messaging_product: "whatsapp",
         to: order.phone,
@@ -47,7 +73,7 @@ export const sendOrderMessage = async (order: any) => {
 
       {
         headers: {
-          Authorization: `Bearer ${process.env.WHATSAPP_TOKEN}`,
+          Authorization: `Bearer ${token}`,
           "Content-Type": "application/json",
         },
       }
@@ -59,10 +85,18 @@ export const sendOrderMessage = async (order: any) => {
   }
 };
 
-export const sendTextMessage = async (phone: string, bodyText: string) => {
+export const sendTextMessage = async (phone: string, bodyText: string, userId?: string) => {
   try {
+    const finalUserId = userId || DEFAULT_USER_ID;
+    const { token, phoneNumberId } = await getMetaCredentials(finalUserId);
+
+    if (!token || !phoneNumberId) {
+      console.error("[WhatsApp Service] Missing Meta credentials for user", finalUserId);
+      return;
+    }
+
     await axios.post(
-      `https://graph.facebook.com/v22.0/${process.env.WHATSAPP_PHONE_NUMBER_ID}/messages`,
+      `https://graph.facebook.com/v22.0/${phoneNumberId}/messages`,
       {
         messaging_product: "whatsapp",
         recipient_type: "individual",
@@ -75,7 +109,7 @@ export const sendTextMessage = async (phone: string, bodyText: string) => {
       },
       {
         headers: {
-          Authorization: `Bearer ${process.env.WHATSAPP_TOKEN}`,
+          Authorization: `Bearer ${token}`,
           "Content-Type": "application/json",
         },
       }

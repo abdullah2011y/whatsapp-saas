@@ -1,12 +1,13 @@
 import prisma from "../../config/database";
 import { triggerAutomation } from "../templates/automation.service";
 
-export const createOrder = async (data: any) => {
-  const count = await prisma.order.count();
+export const createOrder = async (userId: string, data: any) => {
+  const count = await prisma.order.count({ where: { userId } });
   const nextOrderNumber = 1000 + count + 1;
 
   const order = await prisma.order.create({
     data: {
+      userId,
       customer: data.customer || "Unknown Customer",
       phone: data.phone,
       product: data.product,
@@ -31,8 +32,8 @@ export const createOrder = async (data: any) => {
   return order;
 };
 
-export const getOrders = async (search?: string) => {
-  const where: any = {};
+export const getOrders = async (userId: string, search?: string) => {
+  const where: any = { userId };
   if (search) {
     const cleanSearch = search.trim();
     const searchNumber = parseInt(cleanSearch, 10);
@@ -50,7 +51,7 @@ export const getOrders = async (search?: string) => {
     if (is32BitSignedInteger) {
       OR.push({ orderNumber: searchNumber });
     }
-    where.OR = OR;
+    where.AND = [{ OR }];
   }
 
   return await prisma.order.findMany({
@@ -59,9 +60,9 @@ export const getOrders = async (search?: string) => {
   });
 };
 
-export const getOrderById = async (id: string) => {
-  return await prisma.order.findUnique({
-    where: { id }
+export const getOrderById = async (userId: string, id: string) => {
+  return await prisma.order.findFirst({
+    where: { id, userId }
   });
 };
 

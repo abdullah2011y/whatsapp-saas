@@ -21,33 +21,36 @@ export const renderTemplate = (content: string, order: any): string => {
     .replace(/\{\{courier_name\}\}/g, courierName);
 };
 
-export const createTemplate = async (name: string, content: string) => {
+export const createTemplate = async (userId: string, name: string, content: string) => {
   return await prisma.template.create({
-    data: { name, content }
+    data: { userId, name, content }
   });
 };
 
-export const getTemplates = async () => {
+export const getTemplates = async (userId: string) => {
   return await prisma.template.findMany({
+    where: { userId },
     orderBy: { createdAt: "desc" }
   });
 };
 
-export const getTemplateById = async (id: string) => {
-  return await prisma.template.findUnique({
-    where: { id }
+export const getTemplateById = async (userId: string, id: string) => {
+  return await prisma.template.findFirst({
+    where: { id, userId }
   });
 };
 
-export const updateTemplate = async (id: string, name: string, content: string) => {
+export const updateTemplate = async (userId: string, id: string, name: string, content: string) => {
+  // Ensure template belongs to the user
   return await prisma.template.update({
-    where: { id },
+    where: { id, userId },
     data: { name, content }
   });
 };
 
-export const deleteTemplate = async (id: string) => {
+export const deleteTemplate = async (userId: string, id: string) => {
+  // Ensure template belongs to the user
   return await prisma.template.delete({
-    where: { id }
+    where: { id, userId }
   });
 };

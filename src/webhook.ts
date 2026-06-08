@@ -2,17 +2,30 @@ import { Request, Response } from "express";
 import prisma from "./config/database";
 import { updateOrderStatus } from "./modules/orders/order.service";
 
-export const webhookGet = (req: Request, res: Response) => {
+export const webhookGet = async (req: Request, res: Response) => {
   console.log(req.query);
-
-  const verifyToken = "byteforge_verify";
 
   const mode = req.query["hub.mode"];
   const token = req.query["hub.verify_token"];
   const challenge = req.query["hub.challenge"];
 
+  let isVerified = false;
+
+  if (mode === "subscribe") {
+    if (token === "byteforge_verify") {
+      isVerified = true;
+    } else if (token) {
+      const settings = await prisma.settings.findFirst({
+        where: { metaVerifyToken: String(token) }
+      });
+      if (settings) {
+        isVerified = true;
+      }
+    }
+  }
+
   // VERIFY WEBHOOK
-  if (mode === "subscribe" && token === verifyToken) {
+  if (isVerified) {
     return res.status(200).send(challenge);
   }
 

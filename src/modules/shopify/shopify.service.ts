@@ -1,8 +1,19 @@
 import prisma from "../../config/database";
 import { triggerAutomation } from "../templates/automation.service";
 
-export const handleShopifyOrderCreate = async (payload: any) => {
+export const handleShopifyOrderCreate = async (payload: any, shopDomain?: string) => {
   const shopifyOrderId = String(payload.id);
+
+  // Find tenant by shop domain
+  let userId = "97e2acb1-0bee-4b31-be9e-3e31f8b4a916"; // Primary user default fallback
+  if (shopDomain) {
+    const settings = await prisma.settings.findFirst({
+      where: { shopifyDomain: shopDomain }
+    });
+    if (settings) {
+      userId = settings.userId;
+    }
+  }
 
   // Check for duplicate
   const existingOrder = await prisma.order.findUnique({
@@ -46,11 +57,12 @@ export const handleShopifyOrderCreate = async (payload: any) => {
   const zip = payload.shipping_address?.zip || null;
   const country = payload.shipping_address?.country || null;
 
-  console.log(`[Shopify Webhook] Saving new order: ${shopifyOrderId} (${orderName})`);
+  console.log(`[Shopify Webhook] Saving new order for user ${userId}: ${shopifyOrderId} (${orderName})`);
 
   // Create new order in Prisma
   const newOrder = await prisma.order.create({
     data: {
+      userId,
       shopifyOrderId,
       customer: customerName || "Unknown Customer",
       phone: phone,
@@ -83,4 +95,4 @@ export const handleShopifyOrderCreate = async (payload: any) => {
   }
 
   return newOrder;
-}
+};
