@@ -4,7 +4,7 @@ import { handleShopifyOrderCreate } from "./shopify.service";
 export const webhookHandler = async (req: Request, res: Response) => {
   try {
     console.log("[Shopify Webhook] Shopify order received. Payload ID:", req.body.id);
-    
+
     const topic = req.headers["x-shopify-topic"];
     console.log(`[Shopify Webhook] Topic: ${topic || 'unknown'}`);
 
