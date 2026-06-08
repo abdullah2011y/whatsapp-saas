@@ -32,9 +32,11 @@ ADD COLUMN     "source" "OrderSource" NOT NULL DEFAULT 'BF',
 ADD COLUMN     "trackingNumber" TEXT,
 ADD COLUMN     "updatedAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
 ADD COLUMN     "userId" TEXT,
-ADD COLUMN     "zip" TEXT,
-DROP COLUMN "status",
-ADD COLUMN     "status" "OrderStatus" NOT NULL DEFAULT 'PENDING';
+ADD COLUMN     "zip" TEXT;
+
+-- Safe conversion of status column from TEXT to OrderStatus enum
+ALTER TABLE "Order" ALTER COLUMN "status" TYPE "OrderStatus" USING "status"::"OrderStatus";
+
 
 -- CreateTable
 CREATE TABLE "User" (
