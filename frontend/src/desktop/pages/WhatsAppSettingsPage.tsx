@@ -5,7 +5,12 @@ import {
   Loader2, 
   Save, 
   Settings,
-  AlertTriangle
+  AlertTriangle,
+  Copy,
+  Check,
+  RefreshCw,
+  Play,
+  Globe
 } from "lucide-react"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/shared/components/ui/card"
 import { Button } from "@/shared/components/ui/button"
@@ -15,6 +20,11 @@ import { apiFetch } from "@/shared/lib/api/client"
 export default function WhatsAppSettingsPage() {
   const [loading, setLoading] = useState(true)
   const [isSaving, setIsSaving] = useState(false)
+  const [copiedUrl, setCopiedUrl] = useState(false)
+  const [copiedToken, setCopiedToken] = useState(false)
+  const [isTestingWebhook, setIsTestingWebhook] = useState(false)
+  const [isRegeneratingToken, setIsRegeneratingToken] = useState(false)
+  const [webhookTestResult, setWebhookTestResult] = useState<{ success: boolean; message: string } | null>(null)
 
   const [form, setForm] = useState({
     enabledProviders: "BOTH", // META, WEB, BOTH
@@ -22,8 +32,22 @@ export default function WhatsAppSettingsPage() {
     confirmationMethod: "BUTTONS", // BUTTONS, POLLS, CUSTOM
     pollConfirmLabel: "✅ Yes Confirmed",
     pollCancelLabel: "❌ No Cancelled",
-    shopifyDomain: ""
+    shopifyDomain: "",
+    verifyToken: ""
   })
+
+  // Determine webhook URL based on window environment
+  const getWebhookUrl = () => {
+    if (typeof window !== "undefined") {
+      const isLocal = window.location.hostname === "localhost";
+      const host = isLocal ? "http://localhost:5000" : window.location.origin.replace("frontend", "backend");
+      // Fallback
+      return `${host.replace(":3000", ":5000")}/webhook`;
+    }
+    return "/webhook";
+  }
+
+  const webhookUrl = getWebhookUrl();
 
   const fetchSettings = async () => {
     try {
@@ -36,7 +60,8 @@ export default function WhatsAppSettingsPage() {
           confirmationMethod: data.confirmationMethod || "BUTTONS",
           pollConfirmLabel: data.pollConfirmLabel || "✅ Yes Confirmed",
           pollCancelLabel: data.pollCancelLabel || "❌ No Cancelled",
-          shopifyDomain: data.shopifyDomain || ""
+          shopifyDomain: data.shopifyDomain || "",
+          verifyToken: data.verifyToken || ""
         })
       }
     } catch (err) {
@@ -49,6 +74,60 @@ export default function WhatsAppSettingsPage() {
   useEffect(() => {
     fetchSettings()
   }, [])
+
+  const copyToClipboard = (text: string, type: "url" | "token") => {
+    navigator.clipboard.writeText(text)
+    if (type === "url") {
+      setCopiedUrl(true)
+      setTimeout(() => setCopiedUrl(false), 2000)
+    } else {
+      setCopiedToken(true)
+      setTimeout(() => setCopiedToken(false), 2000)
+    }
+  }
+
+  const handleRegenerateToken = async () => {
+    setIsRegeneratingToken(true)
+    setWebhookTestResult(null)
+    try {
+      const res = await apiFetch("/whatsapp/webhook/regenerate-token", {
+        method: "POST"
+      })
+      if (res.ok) {
+        const data = await res.json()
+        setForm(prev => ({ ...prev, verifyToken: data.verifyToken }))
+        alert("Verify token regenerated! Save settings to apply.")
+      } else {
+        alert("Failed to regenerate verify token.")
+      }
+    } catch (err) {
+      console.error(err)
+      alert("Error regenerating verify token.")
+    } finally {
+      setIsRegeneratingToken(false)
+    }
+  }
+
+  const handleTestWebhook = async () => {
+    setIsTestingWebhook(true)
+    setWebhookTestResult(null)
+    try {
+      const res = await apiFetch("/whatsapp/webhook/test", {
+        method: "POST"
+      })
+      const data = await res.json()
+      if (res.ok) {
+        setWebhookTestResult({ success: true, message: data.message || "Webhook verification loopback test succeeded!" })
+      } else {
+        setWebhookTestResult({ success: false, message: data.error || "Webhook loopback test failed." })
+      }
+    } catch (err) {
+      console.error(err)
+      setWebhookTestResult({ success: false, message: "Network error. Failed to run loopback webhook test." })
+    } finally {
+      setIsTestingWebhook(false)
+    }
+  }
 
   const handleSave = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -266,6 +345,105 @@ export default function WhatsAppSettingsPage() {
                   />
                 </div>
               </div>
+            </CardContent>
+          </Card>
+
+          {/* Webhook Configuration Section */}
+          <Card className="bg-black/20 border-border/40 backdrop-blur-sm">
+            <CardHeader>
+              <CardTitle className="text-base font-bold text-white flex items-center gap-2">
+                <Globe className="w-4 h-4 text-cyan-400" /> Webhook settings
+              </CardTitle>
+              <CardDescription>Configure external integrations and inspect webhook loopback status.</CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-6">
+              {/* Webhook URL */}
+              <div className="space-y-2">
+                <label className="text-xs font-semibold uppercase tracking-wider text-muted-foreground block">Webhook URL</label>
+                <div className="flex items-center gap-2">
+                  <Input 
+                    readOnly 
+                    value={webhookUrl}
+                    className="bg-black/40 border-border/40 font-mono text-xs flex-1 select-all"
+                  />
+                  <Button 
+                    type="button"
+                    variant="outline" 
+                    size="icon" 
+                    onClick={() => copyToClipboard(webhookUrl, "url")}
+                    className="border-border/40 hover:bg-accent/40 shrink-0"
+                  >
+                    {copiedUrl ? <Check className="w-4 h-4 text-green-400" /> : <Copy className="w-4 h-4 text-cyan-400" />}
+                  </Button>
+                </div>
+              </div>
+
+              {/* Webhook Verify Token */}
+              <div className="space-y-2">
+                <label className="text-xs font-semibold uppercase tracking-wider text-muted-foreground block">Webhook Verify Token</label>
+                <div className="flex items-center gap-2">
+                  <Input 
+                    placeholder="Verify Token (e.g. byteforge_verify)"
+                    value={form.verifyToken}
+                    onChange={(e) => setForm(prev => ({ ...prev, verifyToken: e.target.value }))}
+                    className="bg-black/40 border-border/40 font-mono text-xs flex-1"
+                  />
+                  <Button 
+                    type="button"
+                    variant="outline" 
+                    size="icon" 
+                    onClick={() => copyToClipboard(form.verifyToken, "token")}
+                    disabled={!form.verifyToken}
+                    className="border-border/40 hover:bg-accent/40 shrink-0"
+                  >
+                    {copiedToken ? <Check className="w-4 h-4 text-green-400" /> : <Copy className="w-4 h-4 text-cyan-400" />}
+                  </Button>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    onClick={handleRegenerateToken}
+                    disabled={isRegeneratingToken}
+                    className="border-border/40 hover:bg-accent/40 text-xs shrink-0"
+                  >
+                    {isRegeneratingToken ? <Loader2 className="w-3.5 h-3.5 animate-spin mr-1" /> : <RefreshCw className="w-3.5 h-3.5 mr-1" />}
+                    Regenerate
+                  </Button>
+                </div>
+              </div>
+
+              {/* Test Webhook Connection */}
+              <div className="border-t border-border/20 pt-4 flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-4">
+                <div>
+                  <h4 className="text-sm font-semibold text-white">Webhook Connection Test</h4>
+                  <p className="text-[10px] text-muted-foreground mt-0.5">Test local verify token validation loops.</p>
+                </div>
+                <Button 
+                  type="button"
+                  onClick={handleTestWebhook}
+                  disabled={isTestingWebhook || !form.verifyToken}
+                  className="bg-green-500/20 text-green-400 hover:bg-green-500 hover:text-black border border-green-500/30 font-bold px-4 py-2 text-xs"
+                >
+                  {isTestingWebhook ? <Loader2 className="w-3.5 h-3.5 animate-spin mr-2" /> : <Play className="w-3.5 h-3.5 mr-2" />}
+                  Connection Test
+                </Button>
+              </div>
+
+              {/* Webhook Test Outcomes */}
+              {webhookTestResult && (
+                <div className={`p-4 rounded-xl border flex items-start gap-3 mt-4 ${
+                  webhookTestResult.success 
+                    ? "bg-green-500/10 border-green-500/25 text-green-400" 
+                    : "bg-red-500/10 border-red-500/25 text-red-400"
+                }`}>
+                  {webhookTestResult.success ? <Check className="w-5 h-5 shrink-0 mt-0.5" /> : <AlertTriangle className="w-5 h-5 shrink-0 mt-0.5" />}
+                  <div>
+                    <h5 className="font-semibold text-sm">{webhookTestResult.success ? "Loopback Success" : "Loopback Verification Failed"}</h5>
+                    <p className="text-xs opacity-90 mt-1 font-mono leading-relaxed break-all">
+                      {webhookTestResult.message}
+                    </p>
+                  </div>
+                </div>
+              )}
             </CardContent>
           </Card>
         </div>

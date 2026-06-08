@@ -58,14 +58,14 @@ app.get("/", (req, res) => {
   res.send("WhatsApp SaaS Backend Running");
 });
 
-import { initializeAllSessions } from "./modules/whatsapp/baileys.manager";
+import { initializeDatabase } from "./config/init_db";
 
 const PORT = 5000;
 
 app.listen(PORT, () => {
   console.log(`Server running on port ${PORT}`);
-  initializeAllSessions().catch((err) => {
-    console.error("[Startup] Failed to restore active Baileys sessions:", err);
+  initializeDatabase().catch((err) => {
+    console.error("[Startup] Failed to initialize database and sessions:", err);
   });
 });
 // Dashboard routes: /dashboard/stats, /dashboard/analytics, /dashboard/customers

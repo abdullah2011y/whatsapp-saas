@@ -84,7 +84,8 @@ router.get("/settings", async (req: AuthenticatedRequest, res: Response) => {
       confirmationMethod: settings?.confirmationMethod || "BUTTONS",
       pollConfirmLabel: settings?.pollConfirmLabel || "✅ Yes Confirmed",
       pollCancelLabel: settings?.pollCancelLabel || "❌ No Cancelled",
-      shopifyDomain: settings?.shopifyDomain || ""
+      shopifyDomain: settings?.shopifyDomain || "",
+      verifyToken: settings?.metaVerifyToken || ""
     });
   } catch (error: any) {
     console.error("Get settings error:", error);
@@ -96,7 +97,7 @@ router.get("/settings", async (req: AuthenticatedRequest, res: Response) => {
 router.post("/settings", async (req: AuthenticatedRequest, res: Response) => {
   try {
     const userId = req.user?.id!;
-    const { enabledProviders, defaultProvider, confirmationMethod, pollConfirmLabel, pollCancelLabel, shopifyDomain } = req.body;
+    const { enabledProviders, defaultProvider, confirmationMethod, pollConfirmLabel, pollCancelLabel, shopifyDomain, verifyToken } = req.body;
 
     const settings = await prisma.settings.upsert({
       where: { userId },
@@ -106,7 +107,8 @@ router.post("/settings", async (req: AuthenticatedRequest, res: Response) => {
         confirmationMethod,
         pollConfirmLabel,
         pollCancelLabel,
-        shopifyDomain
+        shopifyDomain,
+        metaVerifyToken: verifyToken
       },
       create: {
         userId,
@@ -115,7 +117,8 @@ router.post("/settings", async (req: AuthenticatedRequest, res: Response) => {
         confirmationMethod,
         pollConfirmLabel,
         pollCancelLabel,
-        shopifyDomain
+        shopifyDomain,
+        metaVerifyToken: verifyToken
       }
     });
 
@@ -388,6 +391,71 @@ router.delete("/sessions/:id", async (req: AuthenticatedRequest, res: Response) 
     }
   } catch (error: any) {
     console.error("Delete session error:", error);
+    res.status(500).json({ error: "Internal server error" });
+  }
+});
+
+// POST /whatsapp/webhook/regenerate-token
+router.post("/webhook/regenerate-token", async (req: AuthenticatedRequest, res: Response) => {
+  try {
+    const userId = req.user?.id!;
+    const crypto = await import("crypto");
+    const newToken = crypto.randomBytes(8).toString("hex");
+
+    await prisma.settings.upsert({
+      where: { userId },
+      update: { metaVerifyToken: newToken },
+      create: { userId, metaVerifyToken: newToken }
+    });
+
+    res.json({ success: true, verifyToken: newToken });
+  } catch (error: any) {
+    console.error("Regenerate verify token error:", error);
+    res.status(500).json({ error: "Internal server error" });
+  }
+});
+
+// POST /whatsapp/webhook/test
+router.post("/webhook/test", async (req: AuthenticatedRequest, res: Response) => {
+  try {
+    const userId = req.user?.id!;
+    const settings = await prisma.settings.findUnique({
+      where: { userId }
+    });
+
+    if (!settings || !settings.metaVerifyToken) {
+      return res.status(400).json({ error: "Verify token is missing. Please save settings first." });
+    }
+
+    const verifyToken = settings.metaVerifyToken;
+    const localWebhookUrl = `http://localhost:5000/webhook`;
+
+    try {
+      const response = await axios.get(localWebhookUrl, {
+        params: {
+          "hub.mode": "subscribe",
+          "hub.verify_token": verifyToken,
+          "hub.challenge": "verification_loopback_success_123"
+        }
+      });
+
+      if (response.status === 200 && response.data === "verification_loopback_success_123") {
+        return res.json({ success: true, message: "Webhook loopback verification test passed successfully." });
+      } else {
+        return res.status(400).json({ 
+          error: "Webhook responded with unexpected content.", 
+          details: `Expected 'verification_loopback_success_123' but got: '${response.data}'` 
+        });
+      }
+    } catch (apiError: any) {
+      console.error("Local webhook test API failure:", apiError.message);
+      return res.status(400).json({ 
+        error: "Failed to connect to local webhook endpoint.", 
+        details: apiError.message 
+      });
+    }
+  } catch (error: any) {
+    console.error("Webhook test error:", error);
     res.status(500).json({ error: "Internal server error" });
   }
 });
