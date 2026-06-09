@@ -1,10 +1,12 @@
-import { Request, Response } from "express";
+import { Response } from "express";
+import { AuthenticatedRequest } from "../auth/auth.middleware";
 import { getCustomerById, getCustomerOrders } from "./customer.service";
 
-export const getCustomerByIdHandler = async (req: Request, res: Response) => {
+export const getCustomerByIdHandler = async (req: AuthenticatedRequest, res: Response) => {
   try {
+    const userId = req.user?.id!;
     const id = String(req.params.id);
-    const customer = await getCustomerById(id);
+    const customer = await getCustomerById(userId, id);
     if (!customer) {
       return res.status(404).json({ error: "Customer not found" });
     }
@@ -15,10 +17,11 @@ export const getCustomerByIdHandler = async (req: Request, res: Response) => {
   }
 };
 
-export const getCustomerOrdersHandler = async (req: Request, res: Response) => {
+export const getCustomerOrdersHandler = async (req: AuthenticatedRequest, res: Response) => {
   try {
+    const userId = req.user?.id!;
     const phone = String(req.params.phone);
-    const orders = await getCustomerOrders(phone);
+    const orders = await getCustomerOrders(userId, phone);
     res.json(orders);
   } catch (error) {
     console.error(`[Customers] Failed to fetch customer orders for ${req.params.phone}:`, error);

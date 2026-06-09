@@ -1,5 +1,5 @@
 "use client"
-import { API_BASE_URL } from "@/shared/config/api"
+import { apiFetch } from "@/shared/lib/api/client"
 
 import * as React from "react"
 import { 
@@ -67,10 +67,10 @@ export default function OrdersPage() {
 
   const fetchOrders = async (query?: string) => {
     try {
-      const url = query 
-        ? `${API_BASE_URL}/orders?search=${encodeURIComponent(query)}`
-        : `${API_BASE_URL}/orders`
-      const res = await fetch(url)
+      const endpoint = query 
+        ? `/orders?search=${encodeURIComponent(query)}`
+        : `/orders`
+      const res = await apiFetch(endpoint)
       if (res.ok) {
         const data = await res.json()
         setOrders(data)
@@ -94,7 +94,7 @@ export default function OrdersPage() {
     setSelectedOrderId(id)
     setLoadingDetails(true)
     try {
-      const res = await fetch(`${API_BASE_URL}/orders/${id}`)
+      const res = await apiFetch(`/orders/${id}`)
       if (res.ok) {
         const data = await res.json()
         setSelectedOrderDetails(data)
@@ -117,9 +117,8 @@ export default function OrdersPage() {
     try {
       setOrders(prev => prev.map(o => o.id === id ? { ...o, status: newStatus } : o))
       
-      const res = await fetch(`${API_BASE_URL}/orders/${id}/status`, {
+      const res = await apiFetch(`/orders/${id}/status`, {
         method: "PATCH",
-        headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ status: newStatus })
       })
       if (!res.ok) {
@@ -139,9 +138,8 @@ export default function OrdersPage() {
     if (!selectedOrderDetails) return
     setIsSavingDetails(true)
     try {
-      const res = await fetch(`${API_BASE_URL}/orders/${selectedOrderDetails.id}/status`, {
+      const res = await apiFetch(`/orders/${selectedOrderDetails.id}/status`, {
         method: "PATCH",
-        headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           status: selectedOrderDetails.status,
           trackingNumber,

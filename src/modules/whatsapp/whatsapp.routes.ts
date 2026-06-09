@@ -58,6 +58,7 @@ router.get("/overview", async (req: AuthenticatedRequest, res: Response) => {
       metaConnected: settings?.metaConnected || false,
       qrConnected: session?.connected || false,
       qrStatus: qrStatus.status,
+      sessionHealth: session?.sessionHealth || "N/A",
       connectedNumber: session?.phoneNumber || settings?.whatsappNumber || null,
       defaultProvider: settings?.defaultProvider || "ASK",
       templatesCount,

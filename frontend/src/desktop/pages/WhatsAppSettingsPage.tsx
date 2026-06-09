@@ -26,9 +26,17 @@ export default function WhatsAppSettingsPage() {
   const [isRegeneratingToken, setIsRegeneratingToken] = useState(false)
   const [webhookTestResult, setWebhookTestResult] = useState<{ success: boolean; message: string } | null>(null)
 
+  const [overview, setOverview] = useState<{
+    metaConnected: boolean
+    qrConnected: boolean
+    qrStatus: string
+    sessionHealth: string
+    connectedNumber: string | null
+  } | null>(null)
+
   const [form, setForm] = useState({
     enabledProviders: "BOTH", // META, WEB, BOTH
-    defaultProvider: "ASK",    // META, WEB, ASK
+    defaultProvider: "META",    // META, WEB
     confirmationMethod: "BUTTONS", // BUTTONS, POLLS, CUSTOM
     pollConfirmLabel: "✅ Yes Confirmed",
     pollCancelLabel: "❌ No Cancelled",
@@ -49,14 +57,33 @@ export default function WhatsAppSettingsPage() {
 
   const webhookUrl = getWebhookUrl();
 
+  const fetchOverview = async () => {
+    try {
+      const res = await apiFetch("/whatsapp/overview")
+      if (res.ok) {
+        const data = await res.json()
+        setOverview({
+          metaConnected: data.metaConnected || false,
+          qrConnected: data.qrConnected || false,
+          qrStatus: data.qrStatus || "disconnected",
+          sessionHealth: data.sessionHealth || "N/A",
+          connectedNumber: data.connectedNumber || null
+        })
+      }
+    } catch (err) {
+      console.error("Failed to fetch overview:", err)
+    }
+  }
+
   const fetchSettings = async () => {
     try {
       const res = await apiFetch("/whatsapp/settings")
       if (res.ok) {
         const data = await res.json()
+        const dbDefaultProvider = data.defaultProvider || "META"
         setForm({
           enabledProviders: data.enabledProviders || "BOTH",
-          defaultProvider: data.defaultProvider || "ASK",
+          defaultProvider: dbDefaultProvider === "ASK" ? "META" : dbDefaultProvider,
           confirmationMethod: data.confirmationMethod || "BUTTONS",
           pollConfirmLabel: data.pollConfirmLabel || "✅ Yes Confirmed",
           pollCancelLabel: data.pollCancelLabel || "❌ No Cancelled",
@@ -73,6 +100,7 @@ export default function WhatsAppSettingsPage() {
 
   useEffect(() => {
     fetchSettings()
+    fetchOverview()
   }, [])
 
   const copyToClipboard = (text: string, type: "url" | "token") => {
@@ -140,6 +168,7 @@ export default function WhatsAppSettingsPage() {
       if (res.ok) {
         alert("Settings saved successfully!")
         await fetchSettings()
+        await fetchOverview()
       } else {
         alert("Failed to save settings.")
       }
@@ -169,6 +198,72 @@ export default function WhatsAppSettingsPage() {
         <p className="text-muted-foreground text-sm mt-1">
           Adjust provider options, defaults, interactive confirmation elements, and Shopify tenant configurations.
         </p>
+      </div>
+
+      {/* Gateway Status Indicators */}
+      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+        {/* Meta API Status */}
+        <Card className="bg-black/20 border-border/40 backdrop-blur-sm shadow-[0_4px_20px_rgba(0,0,0,0.15)] hover:border-cyan-500/30 transition-all duration-300">
+          <CardContent className="p-4">
+            <div className="space-y-1">
+              <p className="text-[10px] uppercase font-bold tracking-wider text-muted-foreground">Meta Cloud API</p>
+              <div className="flex items-center gap-2">
+                <span className={`inline-block w-2.5 h-2.5 rounded-full ${overview?.metaConnected ? "bg-green-500 shadow-[0_0_8px_#22c55e]" : "bg-red-500 shadow-[0_0_8px_#ef4444]"}`} />
+                <h4 className="text-sm font-bold text-white">
+                  {overview?.metaConnected ? "Online" : "Offline"}
+                </h4>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+
+        {/* WhatsApp Web Status */}
+        <Card className="bg-black/20 border-border/40 backdrop-blur-sm shadow-[0_4px_20px_rgba(0,0,0,0.15)] hover:border-cyan-500/30 transition-all duration-300">
+          <CardContent className="p-4">
+            <div className="space-y-1">
+              <p className="text-[10px] uppercase font-bold tracking-wider text-muted-foreground">WhatsApp Web QR</p>
+              <div className="flex items-center gap-2">
+                <span className={`inline-block w-2.5 h-2.5 rounded-full ${overview?.qrConnected ? "bg-green-500 shadow-[0_0_8px_#22c55e]" : "bg-red-500 shadow-[0_0_8px_#ef4444]"}`} />
+                <h4 className="text-sm font-bold text-white">
+                  {overview?.qrConnected ? "Online" : "Offline"}
+                </h4>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+
+        {/* Connected Number */}
+        <Card className="bg-black/20 border-border/40 backdrop-blur-sm shadow-[0_4px_20px_rgba(0,0,0,0.15)] hover:border-cyan-500/30 transition-all duration-300">
+          <CardContent className="p-4">
+            <div className="space-y-1 w-full">
+              <p className="text-[10px] uppercase font-bold tracking-wider text-muted-foreground">Connected Number</p>
+              <h4 className="text-sm font-bold text-cyan-400 font-mono truncate" title={overview?.connectedNumber || undefined}>
+                {overview?.connectedNumber || "None"}
+              </h4>
+            </div>
+          </CardContent>
+        </Card>
+
+        {/* Session Health */}
+        <Card className="bg-black/20 border-border/40 backdrop-blur-sm shadow-[0_4px_20px_rgba(0,0,0,0.15)] hover:border-cyan-500/30 transition-all duration-300">
+          <CardContent className="p-4">
+            <div className="space-y-1">
+              <p className="text-[10px] uppercase font-bold tracking-wider text-muted-foreground">Session Health</p>
+              <div className="flex items-center gap-2">
+                <span className={`inline-block w-2.5 h-2.5 rounded-full ${
+                  overview?.sessionHealth === "Healthy" 
+                    ? "bg-green-500 shadow-[0_0_8px_#22c55e]" 
+                    : overview?.sessionHealth === "Unhealthy"
+                    ? "bg-red-500 shadow-[0_0_8px_#ef4444]"
+                    : "bg-gray-500 shadow-[0_0_8px_#6b7280]"
+                }`} />
+                <h4 className="text-sm font-bold text-white">
+                  {overview?.sessionHealth || "N/A"}
+                </h4>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
       </div>
 
       <form onSubmit={handleSave} className="grid gap-6 lg:grid-cols-12">
@@ -230,7 +325,7 @@ export default function WhatsAppSettingsPage() {
               {/* Default Provider */}
               <div className="space-y-3 border-t border-border/20 pt-4">
                 <label className="text-xs font-semibold uppercase tracking-wider text-muted-foreground block">Default Routing Provider</label>
-                <div className="grid gap-3 sm:grid-cols-3">
+                <div className="grid gap-3 sm:grid-cols-2">
                   <label className={`flex flex-col p-4 rounded-xl border cursor-pointer transition-all ${form.defaultProvider === 'META' ? 'border-cyan-500 bg-cyan-950/10' : 'border-border/30 bg-black/25 hover:border-border/60'}`}>
                     <input 
                       type="radio" 
@@ -255,19 +350,6 @@ export default function WhatsAppSettingsPage() {
                     />
                     <span className="font-bold text-sm text-white">WhatsApp Web</span>
                     <span className="text-[10px] text-muted-foreground mt-1">Default to poll-based web configurations.</span>
-                  </label>
-
-                  <label className={`flex flex-col p-4 rounded-xl border cursor-pointer transition-all ${form.defaultProvider === 'ASK' ? 'border-cyan-500 bg-cyan-950/10' : 'border-border/30 bg-black/25 hover:border-border/60'}`}>
-                    <input 
-                      type="radio" 
-                      name="defaultProvider" 
-                      value="ASK"
-                      checked={form.defaultProvider === 'ASK'}
-                      onChange={(e) => setForm(prev => ({ ...prev, defaultProvider: e.target.value }))}
-                      className="sr-only"
-                    />
-                    <span className="font-bold text-sm text-white">Ask Every Time</span>
-                    <span className="text-[10px] text-muted-foreground mt-1">Fallback automatically based on available sessions.</span>
                   </label>
                 </div>
               </div>

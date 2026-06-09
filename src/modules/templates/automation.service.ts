@@ -48,7 +48,8 @@ export const updateAutomation = async (
   userId: string,
   trigger: string,
   isEnabled: boolean,
-  templateId: string | null
+  templateId: string | null,
+  providerOverride: string | null = null
 ) => {
   return await prisma.automation.upsert({
     where: {
@@ -57,8 +58,8 @@ export const updateAutomation = async (
         trigger
       }
     },
-    update: { isEnabled, templateId },
-    create: { userId, trigger, isEnabled, templateId }
+    update: { isEnabled, templateId, providerOverride },
+    create: { userId, trigger, isEnabled, templateId, providerOverride }
   });
 };
 
@@ -81,28 +82,34 @@ export const triggerAutomation = async (triggerType: string, order: any) => {
       include: { template: true }
     });
 
-    // Resolve which provider to use
-    let providerToUse = "META";
-    if (settings) {
-      if (settings.enabledProviders === "WEB") {
-        providerToUse = "WEB";
-      } else if (settings.enabledProviders === "BOTH") {
-        if (settings.defaultProvider === "WEB") {
-          providerToUse = "WEB";
-        } else if (settings.defaultProvider === "ASK") {
-          const qrSession = await prisma.whatsappSession.findUnique({
-            where: { userId }
-          });
-          if (qrSession?.connected) {
-            providerToUse = "WEB";
-          }
-        }
-      }
+    // Resolve which provider to use based on connection states (Phase 6)
+    const qrSession = await prisma.whatsappSession.findUnique({
+      where: { userId }
+    });
+
+    const isMetaConnected = settings?.metaConnected || false;
+    const isQrConnected = qrSession?.connected || false;
+
+    let providerToUse = "META"; // Default fallback
+    if (isMetaConnected && !isQrConnected) {
+      providerToUse = "META";
+    } else if (isQrConnected && !isMetaConnected) {
+      providerToUse = "WEB";
+    } else if (isMetaConnected && isQrConnected) {
+      providerToUse = settings?.defaultProvider === "WEB" ? "WEB" : "META";
+    } else {
+      providerToUse = settings?.defaultProvider === "WEB" ? "WEB" : "META";
     }
 
-    console.log(`[Automation Trigger] Selected Provider: ${providerToUse}`);
+    // Apply automation-level overrides (Phase 7)
+    let resolvedProvider = providerToUse;
+    if (config && config.providerOverride && config.providerOverride !== "DEFAULT") {
+      resolvedProvider = config.providerOverride;
+    }
 
-    if (providerToUse === "WEB") {
+    console.log(`[Automation Trigger] Connection states: Meta connected = ${isMetaConnected}, QR connected = ${isQrConnected}. Default Provider resolved: ${providerToUse}. Resolved Provider with Override: ${resolvedProvider}`);
+
+    if (resolvedProvider === "WEB") {
       const confirmLabel = settings?.pollConfirmLabel || "✅ Yes Confirmed";
       const cancelLabel = settings?.pollCancelLabel || "❌ No Cancelled";
 

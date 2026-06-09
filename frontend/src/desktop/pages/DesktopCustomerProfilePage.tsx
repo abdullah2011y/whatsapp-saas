@@ -1,5 +1,5 @@
 "use client"
-import { API_BASE_URL } from "@/shared/config/api"
+import { apiFetch } from "@/shared/lib/api/client"
 
 import * as React from "react"
 import { useRouter } from "next/navigation"
@@ -42,7 +42,7 @@ export default function DesktopCustomerProfilePage({ customerId }: DesktopCustom
   const fetchData = async () => {
     try {
       // Fetch customer details
-      const customerRes = await fetch(`${API_BASE_URL}/customers/${customerId}`)
+      const customerRes = await apiFetch(`/customers/${customerId}`)
       if (!customerRes.ok) {
         if (customerRes.status === 404) {
           throw new Error("Customer not found")
@@ -53,7 +53,7 @@ export default function DesktopCustomerProfilePage({ customerId }: DesktopCustom
       setCustomer(customerData)
 
       // Fetch customer orders
-      const ordersRes = await fetch(`${API_BASE_URL}/customers/${customerId}/orders`)
+      const ordersRes = await apiFetch(`/customers/${customerId}/orders`)
       if (ordersRes.ok) {
         const ordersData = await ordersRes.json()
         setOrders(ordersData)
@@ -78,9 +78,8 @@ export default function DesktopCustomerProfilePage({ customerId }: DesktopCustom
       // Optimistic update
       setOrders(prev => prev.map(o => o.id === id ? { ...o, status: newStatus } : o))
       
-      const res = await fetch(`${API_BASE_URL}/orders/${id}/status`, {
+      const res = await apiFetch(`/orders/${id}/status`, {
         method: "PATCH",
-        headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ status: newStatus })
       })
       if (!res.ok) {

@@ -1,4 +1,4 @@
-import { API_BASE_URL } from "@/shared/config/api";
+import { apiFetch } from "./client";
 
 export interface Order {
   id: string;
@@ -11,7 +11,7 @@ export interface Order {
 }
 
 export const fetchOrders = async (): Promise<Order[]> => {
-  const response = await fetch(`${API_BASE_URL}/orders`);
+  const response = await apiFetch("/orders");
   if (!response.ok) {
     throw new Error("Failed to fetch orders");
   }
@@ -19,11 +19,8 @@ export const fetchOrders = async (): Promise<Order[]> => {
 };
 
 export const updateOrderStatus = async (id: string, status: string): Promise<Order> => {
-  const response = await fetch(`${API_BASE_URL}/orders/${id}/status`, {
+  const response = await apiFetch(`/orders/${id}/status`, {
     method: "PATCH",
-    headers: {
-      "Content-Type": "application/json",
-    },
     body: JSON.stringify({ status }),
   });
   if (!response.ok) {

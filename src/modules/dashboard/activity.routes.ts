@@ -1,11 +1,15 @@
 import { Router } from "express";
 import prisma from "../../config/database";
+import { authMiddleware, AuthenticatedRequest } from "../auth/auth.middleware";
 
 const router = Router();
+router.use(authMiddleware as any);
 
-router.get("/", async (req, res) => {
+router.get("/", async (req: AuthenticatedRequest, res) => {
   try {
+    const userId = req.user?.id!;
     const orders = await prisma.order.findMany({
+      where: { userId },
       orderBy: { createdAt: "desc" },
       take: 50
     });

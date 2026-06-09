@@ -1,7 +1,8 @@
 import prisma from "../../config/database";
 
-export const getAnalyticsOverview = async () => {
+export const getAnalyticsOverview = async (userId: string) => {
   const orders = await prisma.order.findMany({
+    where: { userId },
     orderBy: { createdAt: "asc" }
   });
 
@@ -34,8 +35,10 @@ export const getAnalyticsOverview = async () => {
   return chartData;
 };
 
-export const getTopProducts = async () => {
-  const orders = await prisma.order.findMany();
+export const getTopProducts = async (userId: string) => {
+  const orders = await prisma.order.findMany({
+    where: { userId }
+  });
   
   const productMap = new Map<string, {
     product: string;
@@ -70,8 +73,10 @@ export const getTopProducts = async () => {
   return Array.from(productMap.values()).sort((a, b) => b.totalSales - a.totalSales);
 };
 
-export const getCustomerAnalytics = async () => {
-  const orders = await prisma.order.findMany();
+export const getCustomerAnalytics = async (userId: string) => {
+  const orders = await prisma.order.findMany({
+    where: { userId }
+  });
   
   const customerMap = new Map<string, {
     name: string;

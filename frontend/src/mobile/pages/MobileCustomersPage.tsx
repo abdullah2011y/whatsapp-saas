@@ -1,5 +1,5 @@
 "use client"
-import { API_BASE_URL } from "@/shared/config/api"
+import { apiFetch } from "@/shared/lib/api/client"
 
 import * as React from "react"
 import { Card } from "@/shared/components/ui/card"
@@ -14,7 +14,7 @@ export default function MobileCustomersPage() {
 
   const fetchCustomers = async () => {
     try {
-      const res = await fetch(`${API_BASE_URL}/dashboard/customers`)
+      const res = await apiFetch("/dashboard/customers")
       if (res.ok) {
         const data = await res.json()
         setCustomers(data)

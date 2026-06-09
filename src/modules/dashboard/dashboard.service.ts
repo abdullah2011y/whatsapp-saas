@@ -1,7 +1,8 @@
 import prisma from "../../config/database";
 
-export const getDashboardStats = async () => {
+export const getDashboardStats = async (userId: string) => {
   const orders = await prisma.order.findMany({
+    where: { userId },
     orderBy: { createdAt: "desc" }
   });
 
@@ -36,8 +37,9 @@ export const getDashboardStats = async () => {
   };
 };
 
-export const getAnalyticsData = async () => {
+export const getAnalyticsData = async (userId: string) => {
   const orders = await prisma.order.findMany({
+    where: { userId },
     orderBy: { createdAt: "asc" }
   });
 
@@ -62,8 +64,9 @@ export const getAnalyticsData = async () => {
   return chartData;
 };
 
-export const getCustomers = async () => {
+export const getCustomers = async (userId: string) => {
   const orders = await prisma.order.findMany({
+    where: { userId },
     orderBy: { createdAt: "desc" }
   });
 

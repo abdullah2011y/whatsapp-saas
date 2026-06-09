@@ -27,7 +27,7 @@ import { Button } from "@/shared/components/ui/button"
 import { Textarea } from "@/shared/components/ui/textarea"
 import { Input } from "@/shared/components/ui/input"
 
-import { API_BASE_URL } from "@/shared/config/api";
+import { apiFetch } from "@/shared/lib/api/client";
 
 export default function WhatsAppPage() {
   const [activeTab, setActiveTab] = useState<"templates" | "automations">("templates")
@@ -44,7 +44,7 @@ export default function WhatsAppPage() {
   })
 
   // Automations mapping state
-  const [automations, setAutomations] = useState<Record<string, { id?: string; isEnabled: boolean; templateId: string }>>({})
+  const [automations, setAutomations] = useState<Record<string, { id?: string; isEnabled: boolean; templateId: string; providerOverride: string }>>({})
 
   const [whatsappStatus, setWhatsappStatus] = useState({
     whatsappNumber: "Loading...",
@@ -69,7 +69,7 @@ export default function WhatsAppPage() {
   const fetchStatus = async () => {
     setIsSyncing(true)
     try {
-      const res = await fetch(`${API_BASE_URL}/whatsapp/status`)
+      const res = await apiFetch("/whatsapp/status")
       if (res.ok) {
         const data = await res.json()
         setWhatsappStatus({
@@ -93,7 +93,7 @@ export default function WhatsAppPage() {
 
   const fetchTemplates = async () => {
     try {
-      const res = await fetch(`${API_BASE_URL}/templates`)
+      const res = await apiFetch("/templates")
       if (res.ok) {
         const data = await res.json()
         setTemplates(data)
@@ -113,15 +113,16 @@ export default function WhatsAppPage() {
 
   const fetchAutomations = async () => {
     try {
-      const res = await fetch(`${API_BASE_URL}/automations`)
+      const res = await apiFetch("/automations")
       if (res.ok) {
         const data = await res.json()
-        const dict: Record<string, { id?: string; isEnabled: boolean; templateId: string }> = {}
+        const dict: Record<string, { id?: string; isEnabled: boolean; templateId: string; providerOverride: string }> = {}
         data.forEach((a: any) => {
           dict[a.trigger] = {
             id: a.id,
             isEnabled: a.isEnabled,
-            templateId: a.templateId || ""
+            templateId: a.templateId || "",
+            providerOverride: a.providerOverride || "DEFAULT"
           }
         })
         setAutomations(dict)
@@ -152,13 +153,12 @@ export default function WhatsAppPage() {
     setIsSaving(true)
     try {
       const isEditing = !!activeTemplate.id
-      const url = isEditing 
-        ? `${API_BASE_URL}/templates/${activeTemplate.id}` 
-        : `${API_BASE_URL}/templates`
+      const endpoint = isEditing 
+        ? `/templates/${activeTemplate.id}` 
+        : `/templates`
       
-      const res = await fetch(url, {
+      const res = await apiFetch(endpoint, {
         method: isEditing ? "PUT" : "POST",
-        headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           name: activeTemplate.name,
           content: activeTemplate.content
@@ -186,7 +186,7 @@ export default function WhatsAppPage() {
     e.stopPropagation()
     if (!confirm("Are you sure you want to delete this template?")) return
     try {
-      const res = await fetch(`${API_BASE_URL}/templates/${id}`, {
+      const res = await apiFetch(`/templates/${id}`, {
         method: "DELETE"
       })
       if (res.ok) {
@@ -216,25 +216,26 @@ export default function WhatsAppPage() {
     })
   }
 
-  const handleUpdateAutomation = async (trigger: string, isEnabled: boolean, templateId: string) => {
+  const handleUpdateAutomation = async (trigger: string, isEnabled: boolean, templateId: string, providerOverride: string) => {
     // Optimistic update
     setAutomations(prev => ({
       ...prev,
       [trigger]: {
         ...prev[trigger],
         isEnabled,
-        templateId
+        templateId,
+        providerOverride
       }
     }))
 
     try {
-      await fetch(`${API_BASE_URL}/automations`, {
+      await apiFetch("/automations", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           trigger,
           isEnabled,
-          templateId: templateId || null
+          templateId: templateId || null,
+          providerOverride: providerOverride === "DEFAULT" ? null : providerOverride
         })
       })
     } catch (e) {
@@ -582,7 +583,7 @@ export default function WhatsAppPage() {
               <div className="grid gap-4 md:grid-cols-2">
                 {triggersList.map(trigger => {
                   const IconComp = trigger.icon
-                  const setting = automations[trigger.key] || { isEnabled: false, templateId: "" }
+                  const setting = automations[trigger.key] || { isEnabled: false, templateId: "", providerOverride: "DEFAULT" }
                   
                   return (
                     <div 
@@ -602,7 +603,7 @@ export default function WhatsAppPage() {
                               <input 
                                 type="checkbox" 
                                 checked={setting.isEnabled} 
-                                onChange={(e) => handleUpdateAutomation(trigger.key, e.target.checked, setting.templateId)}
+                                onChange={(e) => handleUpdateAutomation(trigger.key, e.target.checked, setting.templateId, setting.providerOverride || "DEFAULT")}
                                 className="sr-only peer" 
                               />
                               <div className="w-9 h-5 bg-gray-800 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-gray-400 peer-checked:after:bg-black after:border-gray-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-cyan-400"></div>
@@ -612,22 +613,37 @@ export default function WhatsAppPage() {
                         </div>
                       </div>
 
-                      <div className="flex items-center justify-between border-t border-border/20 pt-3">
-                        <span className="text-[10px] text-muted-foreground uppercase font-bold tracking-wider">Assigned Template</span>
-                        <select
-                          value={setting.templateId}
-                          onChange={(e) => handleUpdateAutomation(trigger.key, setting.isEnabled, e.target.value)}
-                          className="bg-black/50 text-xs font-medium text-cyan-400 border border-border/40 rounded px-2.5 py-1.5 outline-none focus:border-cyan-500/50 cursor-pointer min-w-[160px]"
-                        >
-                          <option value="" className="bg-gray-900 text-gray-400">
-                            {trigger.key === "ORDER_CREATED" ? "Default confirmation buttons" : "Choose template..."}
-                          </option>
-                          {templates.map(t => (
-                            <option key={t.id} value={t.id} className="bg-gray-900 text-white">
-                              {t.name}
+                      <div className="space-y-3 border-t border-border/20 pt-3">
+                        <div className="flex items-center justify-between">
+                          <span className="text-[10px] text-muted-foreground uppercase font-bold tracking-wider">Assigned Template</span>
+                          <select
+                            value={setting.templateId}
+                            onChange={(e) => handleUpdateAutomation(trigger.key, setting.isEnabled, e.target.value, setting.providerOverride || "DEFAULT")}
+                            className="bg-black/50 text-xs font-medium text-cyan-400 border border-border/40 rounded px-2.5 py-1.5 outline-none focus:border-cyan-500/50 cursor-pointer min-w-[160px]"
+                          >
+                            <option value="" className="bg-gray-900 text-gray-400">
+                              {trigger.key === "ORDER_CREATED" ? "Default confirmation buttons" : "Choose template..."}
                             </option>
-                          ))}
-                        </select>
+                            {templates.map(t => (
+                              <option key={t.id} value={t.id} className="bg-gray-900 text-white">
+                                {t.name}
+                              </option>
+                            ))}
+                          </select>
+                        </div>
+
+                        <div className="flex items-center justify-between">
+                          <span className="text-[10px] text-muted-foreground uppercase font-bold tracking-wider">Provider Override</span>
+                          <select
+                            value={setting.providerOverride || "DEFAULT"}
+                            onChange={(e) => handleUpdateAutomation(trigger.key, setting.isEnabled, setting.templateId, e.target.value)}
+                            className="bg-black/50 text-xs font-medium text-cyan-400 border border-border/40 rounded px-2.5 py-1.5 outline-none focus:border-cyan-500/50 cursor-pointer min-w-[160px]"
+                          >
+                            <option value="DEFAULT" className="bg-gray-900 text-white">Default Provider</option>
+                            <option value="META" className="bg-gray-900 text-white">Meta API</option>
+                            <option value="WEB" className="bg-gray-900 text-white">WhatsApp Web QR</option>
+                          </select>
+                        </div>
                       </div>
                     </div>
                   )

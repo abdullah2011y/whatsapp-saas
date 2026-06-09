@@ -23,7 +23,7 @@ import {
   ExternalLink
 } from "lucide-react"
 
-import { API_BASE_URL } from "@/shared/config/api";
+import { apiFetch } from "@/shared/lib/api/client";
 
 export default function MobileWhatsAppPage() {
   const [activeTab, setActiveTab] = useState<"templates" | "automations" | "preview">("templates")
@@ -40,7 +40,7 @@ export default function MobileWhatsAppPage() {
   })
 
   // Automations mapping state
-  const [automations, setAutomations] = useState<Record<string, { id?: string; isEnabled: boolean; templateId: string }>>({})
+  const [automations, setAutomations] = useState<Record<string, { id?: string; isEnabled: boolean; templateId: string; providerOverride: string }>>({})
 
   const [whatsappStatus, setWhatsappStatus] = useState({
     whatsappNumber: "Loading...",
@@ -65,7 +65,7 @@ export default function MobileWhatsAppPage() {
   const fetchStatus = async () => {
     setIsSyncing(true)
     try {
-      const res = await fetch(`${API_BASE_URL}/whatsapp/status`)
+      const res = await apiFetch("/whatsapp/status")
       if (res.ok) {
         const data = await res.json()
         setWhatsappStatus({
@@ -89,7 +89,7 @@ export default function MobileWhatsAppPage() {
 
   const fetchTemplates = async () => {
     try {
-      const res = await fetch(`${API_BASE_URL}/templates`)
+      const res = await apiFetch("/templates")
       if (res.ok) {
         const data = await res.json()
         setTemplates(data)
@@ -108,15 +108,16 @@ export default function MobileWhatsAppPage() {
 
   const fetchAutomations = async () => {
     try {
-      const res = await fetch(`${API_BASE_URL}/automations`)
+      const res = await apiFetch("/automations")
       if (res.ok) {
         const data = await res.json()
-        const dict: Record<string, { id?: string; isEnabled: boolean; templateId: string }> = {}
+        const dict: Record<string, { id?: string; isEnabled: boolean; templateId: string; providerOverride: string }> = {}
         data.forEach((a: any) => {
           dict[a.trigger] = {
             id: a.id,
             isEnabled: a.isEnabled,
-            templateId: a.templateId || ""
+            templateId: a.templateId || "",
+            providerOverride: a.providerOverride || "DEFAULT"
           }
         })
         setAutomations(dict)
@@ -140,13 +141,12 @@ export default function MobileWhatsAppPage() {
     setIsSaving(true)
     try {
       const isEditing = !!activeTemplate.id
-      const url = isEditing 
-        ? `${API_BASE_URL}/templates/${activeTemplate.id}` 
-        : `${API_BASE_URL}/templates`
+      const endpoint = isEditing 
+        ? `/templates/${activeTemplate.id}` 
+        : `/templates`
       
-      const res = await fetch(url, {
+      const res = await apiFetch(endpoint, {
         method: isEditing ? "PUT" : "POST",
-        headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           name: activeTemplate.name,
           content: activeTemplate.content
@@ -174,7 +174,7 @@ export default function MobileWhatsAppPage() {
     e.stopPropagation()
     if (!confirm("Delete template?")) return
     try {
-      const res = await fetch(`${API_BASE_URL}/templates/${id}`, {
+      const res = await apiFetch(`/templates/${id}`, {
         method: "DELETE"
       })
       if (res.ok) {
@@ -193,24 +193,25 @@ export default function MobileWhatsAppPage() {
     }
   }
 
-  const handleUpdateAutomation = async (trigger: string, isEnabled: boolean, templateId: string) => {
+  const handleUpdateAutomation = async (trigger: string, isEnabled: boolean, templateId: string, providerOverride: string) => {
     setAutomations(prev => ({
       ...prev,
       [trigger]: {
         ...prev[trigger],
         isEnabled,
-        templateId
+        templateId,
+        providerOverride
       }
     }))
 
     try {
-      await fetch(`${API_BASE_URL}/automations`, {
+      await apiFetch("/automations", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           trigger,
           isEnabled,
-          templateId: templateId || null
+          templateId: templateId || null,
+          providerOverride: providerOverride === "DEFAULT" ? null : providerOverride
         })
       })
     } catch (e) {
@@ -421,7 +422,7 @@ export default function MobileWhatsAppPage() {
             <h3 className="text-sm font-semibold text-gray-400 uppercase tracking-wider">Event Triggers</h3>
             <div className="space-y-3">
               {triggersList.map(trigger => {
-                const setting = automations[trigger.key] || { isEnabled: false, templateId: "" }
+                const setting = automations[trigger.key] || { isEnabled: false, templateId: "", providerOverride: "DEFAULT" }
                 return (
                   <div key={trigger.key} className="bg-gray-900 border border-gray-800 rounded-xl p-4 space-y-3">
                     <div className="flex items-center justify-between">
@@ -434,25 +435,40 @@ export default function MobileWhatsAppPage() {
                         <input 
                           type="checkbox" 
                           checked={setting.isEnabled} 
-                          onChange={(e) => handleUpdateAutomation(trigger.key, e.target.checked, setting.templateId)}
+                          onChange={(e) => handleUpdateAutomation(trigger.key, e.target.checked, setting.templateId, setting.providerOverride || "DEFAULT")}
                           className="sr-only peer" 
                         />
                         <div className="w-9 h-5 bg-gray-800 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-gray-400 peer-checked:after:bg-black after:border-gray-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-cyan-400"></div>
                       </label>
                     </div>
 
-                    <div className="flex items-center justify-between border-t border-gray-800/60 pt-2">
-                      <span className="text-[10px] text-gray-400 uppercase font-semibold">Mapped Template</span>
-                      <select
-                        value={setting.templateId}
-                        onChange={(e) => handleUpdateAutomation(trigger.key, setting.isEnabled, e.target.value)}
-                        className="bg-black text-xs font-semibold text-cyan-400 border border-gray-850 rounded px-2 py-1 outline-none"
-                      >
-                        <option value="">Default confirmation</option>
-                        {templates.map(t => (
-                          <option key={t.id} value={t.id}>{t.name}</option>
-                        ))}
-                      </select>
+                    <div className="space-y-2 border-t border-gray-800/60 pt-2">
+                      <div className="flex items-center justify-between">
+                        <span className="text-[10px] text-gray-400 uppercase font-semibold">Mapped Template</span>
+                        <select
+                          value={setting.templateId}
+                          onChange={(e) => handleUpdateAutomation(trigger.key, setting.isEnabled, e.target.value, setting.providerOverride || "DEFAULT")}
+                          className="bg-black text-xs font-semibold text-cyan-400 border border-gray-850 rounded px-2 py-1 outline-none"
+                        >
+                          <option value="">Default confirmation</option>
+                          {templates.map(t => (
+                            <option key={t.id} value={t.id}>{t.name}</option>
+                          ))}
+                        </select>
+                      </div>
+
+                      <div className="flex items-center justify-between">
+                        <span className="text-[10px] text-gray-400 uppercase font-semibold">Provider Override</span>
+                        <select
+                          value={setting.providerOverride || "DEFAULT"}
+                          onChange={(e) => handleUpdateAutomation(trigger.key, setting.isEnabled, setting.templateId, e.target.value)}
+                          className="bg-black text-xs font-semibold text-cyan-400 border border-gray-850 rounded px-2 py-1 outline-none"
+                        >
+                          <option value="DEFAULT">Default Provider</option>
+                          <option value="META">Meta API</option>
+                          <option value="WEB">WhatsApp Web QR</option>
+                        </select>
+                      </div>
                     </div>
                   </div>
                 )

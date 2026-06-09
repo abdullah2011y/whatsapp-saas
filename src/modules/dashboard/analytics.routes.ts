@@ -1,11 +1,14 @@
-import { Router } from "express";
+import { Router, Response } from "express";
 import { getAnalyticsOverview, getTopProducts, getCustomerAnalytics } from "./analytics.service";
+import { authMiddleware, AuthenticatedRequest } from "../auth/auth.middleware";
 
 const router = Router();
+router.use(authMiddleware as any);
 
-router.get("/", async (req, res) => {
+router.get("/", async (req: AuthenticatedRequest, res: Response) => {
   try {
-    const data = await getAnalyticsOverview();
+    const userId = req.user?.id!;
+    const data = await getAnalyticsOverview(userId);
     res.json(data);
   } catch (error) {
     console.error(`[Analytics] Failed to fetch analytics overview:`, error);
@@ -13,9 +16,10 @@ router.get("/", async (req, res) => {
   }
 });
 
-router.get("/products", async (req, res) => {
+router.get("/products", async (req: AuthenticatedRequest, res: Response) => {
   try {
-    const data = await getTopProducts();
+    const userId = req.user?.id!;
+    const data = await getTopProducts(userId);
     res.json(data);
   } catch (error) {
     console.error(`[Analytics] Failed to fetch top products:`, error);
@@ -23,9 +27,10 @@ router.get("/products", async (req, res) => {
   }
 });
 
-router.get("/customers", async (req, res) => {
+router.get("/customers", async (req: AuthenticatedRequest, res: Response) => {
   try {
-    const data = await getCustomerAnalytics();
+    const userId = req.user?.id!;
+    const data = await getCustomerAnalytics(userId);
     res.json(data);
   } catch (error) {
     console.error(`[Analytics] Failed to fetch customer analytics:`, error);

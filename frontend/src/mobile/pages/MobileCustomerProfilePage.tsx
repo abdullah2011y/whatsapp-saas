@@ -1,5 +1,5 @@
 "use client"
-import { API_BASE_URL } from "@/shared/config/api"
+import { apiFetch } from "@/shared/lib/api/client"
 
 import * as React from "react"
 import { useRouter } from "next/navigation"
@@ -28,7 +28,7 @@ export default function MobileCustomerProfilePage({ customerId }: MobileCustomer
 
   const fetchData = async () => {
     try {
-      const customerRes = await fetch(`${API_BASE_URL}/customers/${customerId}`)
+      const customerRes = await apiFetch(`/customers/${customerId}`)
       if (!customerRes.ok) {
         if (customerRes.status === 404) {
           throw new Error("Customer not found")
@@ -38,7 +38,7 @@ export default function MobileCustomerProfilePage({ customerId }: MobileCustomer
       const customerData = await customerRes.json()
       setCustomer(customerData)
 
-      const ordersRes = await fetch(`${API_BASE_URL}/customers/${customerId}/orders`)
+      const ordersRes = await apiFetch(`/customers/${customerId}/orders`)
       if (ordersRes.ok) {
         const ordersData = await ordersRes.json()
         setOrders(ordersData)
@@ -61,9 +61,8 @@ export default function MobileCustomerProfilePage({ customerId }: MobileCustomer
   const updateOrderStatus = async (id: string, newStatus: string) => {
     try {
       setOrders(prev => prev.map(o => o.id === id ? { ...o, status: newStatus } : o))
-      const res = await fetch(`${API_BASE_URL}/orders/${id}/status`, {
+      const res = await apiFetch(`/orders/${id}/status`, {
         method: "PATCH",
-        headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ status: newStatus })
       })
       if (!res.ok) {

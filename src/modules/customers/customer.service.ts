@@ -1,8 +1,9 @@
 import prisma from "../../config/database";
 
-export const getCustomerOrders = async (idOrPhone: string) => {
+export const getCustomerOrders = async (userId: string, idOrPhone: string) => {
   return await prisma.order.findMany({
     where: {
+      userId,
       OR: [
         { phone: idOrPhone },
         { shopifyCustomerId: idOrPhone },
@@ -12,8 +13,8 @@ export const getCustomerOrders = async (idOrPhone: string) => {
   });
 };
 
-export const getCustomerById = async (idOrPhone: string) => {
-  const orders = await getCustomerOrders(idOrPhone);
+export const getCustomerById = async (userId: string, idOrPhone: string) => {
+  const orders = await getCustomerOrders(userId, idOrPhone);
   if (orders.length === 0) {
     return null;
   }
