@@ -98,6 +98,20 @@ app.get("/db-debug", async (req, res) => {
         });
       });
       logs.push("Action deploy completed successfully.");
+    } else if (action === "rollback") {
+      logs.push("Starting action: rollback");
+      await new Promise<void>((resolve, reject) => {
+        exec("npx prisma migrate resolve --rolled-back 20260608131512_add_whatsapp_provider_system", (err, stdout, stderr) => {
+          logs.push(`stdout: ${stdout}`);
+          if (stderr) logs.push(`stderr: ${stderr}`);
+          if (err) {
+            logs.push(`error: ${err.message}`);
+            return reject(err);
+          }
+          resolve();
+        });
+      });
+      logs.push("Action rollback completed successfully.");
     } else if (action === "recover") {
       logs.push("Starting action: recover");
       if (!ownerEmail) {

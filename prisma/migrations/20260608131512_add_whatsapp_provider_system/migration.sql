@@ -1,45 +1,50 @@
-/*
-  Warnings:
+-- 1. Create Enums Safely
+DO $$
+BEGIN
+    IF NOT EXISTS (SELECT 1 FROM pg_type WHERE typname = 'OrderSource') THEN
+        CREATE TYPE "OrderSource" AS ENUM ('BF', 'WA', 'RM');
+    END IF;
+    IF NOT EXISTS (SELECT 1 FROM pg_type WHERE typname = 'OrderStatus') THEN
+        CREATE TYPE "OrderStatus" AS ENUM ('PENDING', 'CONFIRMED', 'CANCELLED');
+    END IF;
+    IF NOT EXISTS (SELECT 1 FROM pg_type WHERE typname = 'ProcessStatus') THEN
+        CREATE TYPE "ProcessStatus" AS ENUM ('UNSHIPPED', 'READY_TO_SHIP', 'SHIPPED', 'DELIVERED', 'RETURNED');
+    END IF;
+END$$;
 
-  - The `status` column on the `Order` table would be dropped and recreated. This will lead to data loss if there is data in the column.
+-- 2. Alter Order Table Safely
+ALTER TABLE "Order" 
+  ADD COLUMN IF NOT EXISTS "address1" TEXT,
+  ADD COLUMN IF NOT EXISTS "address2" TEXT,
+  ADD COLUMN IF NOT EXISTS "city" TEXT,
+  ADD COLUMN IF NOT EXISTS "country" TEXT,
+  ADD COLUMN IF NOT EXISTS "courierName" TEXT,
+  ADD COLUMN IF NOT EXISTS "customerEmail" TEXT,
+  ADD COLUMN IF NOT EXISTS "notes" TEXT,
+  ADD COLUMN IF NOT EXISTS "orderName" TEXT,
+  ADD COLUMN IF NOT EXISTS "orderNumber" INTEGER,
+  ADD COLUMN IF NOT EXISTS "processStatus" "ProcessStatus" NOT NULL DEFAULT 'UNSHIPPED',
+  ADD COLUMN IF NOT EXISTS "province" TEXT,
+  ADD COLUMN IF NOT EXISTS "quantity" INTEGER NOT NULL DEFAULT 1,
+  ADD COLUMN IF NOT EXISTS "shopifyCustomerId" TEXT,
+  ADD COLUMN IF NOT EXISTS "shopifyOrderId" TEXT,
+  ADD COLUMN IF NOT EXISTS "source" "OrderSource" NOT NULL DEFAULT 'BF',
+  ADD COLUMN IF NOT EXISTS "trackingNumber" TEXT,
+  ADD COLUMN IF NOT EXISTS "updatedAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  ADD COLUMN IF NOT EXISTS "userId" TEXT,
+  ADD COLUMN IF NOT EXISTS "zip" TEXT;
 
-*/
--- CreateEnum
-CREATE TYPE "OrderSource" AS ENUM ('BF', 'WA', 'RM');
+-- Safe conversion of status column from TEXT to OrderStatus enum (non-destructive)
+DO $$
+BEGIN
+    IF (SELECT data_type FROM information_schema.columns WHERE table_name = 'Order' AND column_name = 'status') = 'character varying' 
+       OR (SELECT data_type FROM information_schema.columns WHERE table_name = 'Order' AND column_name = 'status') = 'text' THEN
+        ALTER TABLE "Order" ALTER COLUMN "status" TYPE "OrderStatus" USING "status"::"OrderStatus";
+    END IF;
+END$$;
 
--- CreateEnum
-CREATE TYPE "OrderStatus" AS ENUM ('PENDING', 'CONFIRMED', 'CANCELLED');
-
--- CreateEnum
-CREATE TYPE "ProcessStatus" AS ENUM ('UNSHIPPED', 'READY_TO_SHIP', 'SHIPPED', 'DELIVERED', 'RETURNED');
-
--- AlterTable
-ALTER TABLE "Order" ADD COLUMN     "address1" TEXT,
-ADD COLUMN     "address2" TEXT,
-ADD COLUMN     "city" TEXT,
-ADD COLUMN     "country" TEXT,
-ADD COLUMN     "courierName" TEXT,
-ADD COLUMN     "customerEmail" TEXT,
-ADD COLUMN     "notes" TEXT,
-ADD COLUMN     "orderName" TEXT,
-ADD COLUMN     "orderNumber" INTEGER,
-ADD COLUMN     "processStatus" "ProcessStatus" NOT NULL DEFAULT 'UNSHIPPED',
-ADD COLUMN     "province" TEXT,
-ADD COLUMN     "quantity" INTEGER NOT NULL DEFAULT 1,
-ADD COLUMN     "shopifyCustomerId" TEXT,
-ADD COLUMN     "shopifyOrderId" TEXT,
-ADD COLUMN     "source" "OrderSource" NOT NULL DEFAULT 'BF',
-ADD COLUMN     "trackingNumber" TEXT,
-ADD COLUMN     "updatedAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
-ADD COLUMN     "userId" TEXT,
-ADD COLUMN     "zip" TEXT;
-
--- Safe conversion of status column from TEXT to OrderStatus enum
-ALTER TABLE "Order" ALTER COLUMN "status" TYPE "OrderStatus" USING "status"::"OrderStatus";
-
-
--- CreateTable
-CREATE TABLE "User" (
+-- 3. Create Tables Safely (IF NOT EXISTS)
+CREATE TABLE IF NOT EXISTS "User" (
     "id" TEXT NOT NULL,
     "name" TEXT NOT NULL,
     "email" TEXT NOT NULL,
@@ -49,8 +54,7 @@ CREATE TABLE "User" (
     CONSTRAINT "User_pkey" PRIMARY KEY ("id")
 );
 
--- CreateTable
-CREATE TABLE "Template" (
+CREATE TABLE IF NOT EXISTS "Template" (
     "id" TEXT NOT NULL,
     "userId" TEXT,
     "name" TEXT NOT NULL,
@@ -61,8 +65,7 @@ CREATE TABLE "Template" (
     CONSTRAINT "Template_pkey" PRIMARY KEY ("id")
 );
 
--- CreateTable
-CREATE TABLE "Automation" (
+CREATE TABLE IF NOT EXISTS "Automation" (
     "id" TEXT NOT NULL,
     "userId" TEXT,
     "trigger" TEXT NOT NULL,
@@ -74,8 +77,7 @@ CREATE TABLE "Automation" (
     CONSTRAINT "Automation_pkey" PRIMARY KEY ("id")
 );
 
--- CreateTable
-CREATE TABLE "Settings" (
+CREATE TABLE IF NOT EXISTS "Settings" (
     "id" TEXT NOT NULL,
     "userId" TEXT NOT NULL,
     "whatsappNumber" TEXT,
@@ -98,8 +100,7 @@ CREATE TABLE "Settings" (
     CONSTRAINT "Settings_pkey" PRIMARY KEY ("id")
 );
 
--- CreateTable
-CREATE TABLE "WhatsappSession" (
+CREATE TABLE IF NOT EXISTS "WhatsappSession" (
     "id" TEXT NOT NULL,
     "userId" TEXT NOT NULL,
     "phoneNumber" TEXT,
@@ -112,8 +113,7 @@ CREATE TABLE "WhatsappSession" (
     CONSTRAINT "WhatsappSession_pkey" PRIMARY KEY ("id")
 );
 
--- CreateTable
-CREATE TABLE "WhatsappPoll" (
+CREATE TABLE IF NOT EXISTS "WhatsappPoll" (
     "id" TEXT NOT NULL,
     "messageId" TEXT NOT NULL,
     "orderId" TEXT NOT NULL,
@@ -125,62 +125,51 @@ CREATE TABLE "WhatsappPoll" (
     CONSTRAINT "WhatsappPoll_pkey" PRIMARY KEY ("id")
 );
 
--- CreateIndex
+-- 4. Create Indexes Safely
+DROP INDEX IF EXISTS "User_email_key";
 CREATE UNIQUE INDEX "User_email_key" ON "User"("email");
 
--- CreateIndex
+DROP INDEX IF EXISTS "Automation_userId_trigger_key";
 CREATE UNIQUE INDEX "Automation_userId_trigger_key" ON "Automation"("userId", "trigger");
 
--- CreateIndex
+DROP INDEX IF EXISTS "Settings_userId_key";
 CREATE UNIQUE INDEX "Settings_userId_key" ON "Settings"("userId");
 
--- CreateIndex
+DROP INDEX IF EXISTS "WhatsappSession_userId_key";
 CREATE UNIQUE INDEX "WhatsappSession_userId_key" ON "WhatsappSession"("userId");
 
--- CreateIndex
+DROP INDEX IF EXISTS "WhatsappPoll_messageId_key";
 CREATE UNIQUE INDEX "WhatsappPoll_messageId_key" ON "WhatsappPoll"("messageId");
 
--- CreateIndex
-CREATE INDEX "Order_source_idx" ON "Order"("source");
+CREATE INDEX IF NOT EXISTS "Order_source_idx" ON "Order"("source");
+CREATE INDEX IF NOT EXISTS "Order_status_idx" ON "Order"("status");
+CREATE INDEX IF NOT EXISTS "Order_processStatus_idx" ON "Order"("processStatus");
+CREATE INDEX IF NOT EXISTS "Order_phone_idx" ON "Order"("phone");
+CREATE INDEX IF NOT EXISTS "Order_customer_idx" ON "Order"("customer");
+CREATE INDEX IF NOT EXISTS "Order_createdAt_idx" ON "Order"("createdAt");
+CREATE INDEX IF NOT EXISTS "Order_orderNumber_idx" ON "Order"("orderNumber");
 
--- CreateIndex
-CREATE INDEX "Order_status_idx" ON "Order"("status");
+DROP INDEX IF EXISTS "Order_shopifyOrderId_key";
+CREATE UNIQUE INDEX "Order_shopifyOrderId_key" ON "Order"("shopifyOrderId");
 
--- CreateIndex
-CREATE INDEX "Order_processStatus_idx" ON "Order"("processStatus");
-
--- CreateIndex
-CREATE INDEX "Order_phone_idx" ON "Order"("phone");
-
--- CreateIndex
-CREATE INDEX "Order_customer_idx" ON "Order"("customer");
-
--- CreateIndex
-CREATE INDEX "Order_createdAt_idx" ON "Order"("createdAt");
-
--- CreateIndex
-CREATE INDEX "Order_orderNumber_idx" ON "Order"("orderNumber");
-
--- AddForeignKey
+-- 5. Foreign Key Constraints Safely
+ALTER TABLE "Order" DROP CONSTRAINT IF EXISTS "Order_userId_fkey";
 ALTER TABLE "Order" ADD CONSTRAINT "Order_userId_fkey" FOREIGN KEY ("userId") REFERENCES "User"("id") ON DELETE CASCADE ON UPDATE CASCADE;
 
--- AddForeignKey
+ALTER TABLE "Template" DROP CONSTRAINT IF EXISTS "Template_userId_fkey";
 ALTER TABLE "Template" ADD CONSTRAINT "Template_userId_fkey" FOREIGN KEY ("userId") REFERENCES "User"("id") ON DELETE CASCADE ON UPDATE CASCADE;
 
--- AddForeignKey
+ALTER TABLE "Automation" DROP CONSTRAINT IF EXISTS "Automation_userId_fkey";
 ALTER TABLE "Automation" ADD CONSTRAINT "Automation_userId_fkey" FOREIGN KEY ("userId") REFERENCES "User"("id") ON DELETE CASCADE ON UPDATE CASCADE;
 
--- AddForeignKey
+ALTER TABLE "Automation" DROP CONSTRAINT IF EXISTS "Automation_templateId_fkey";
 ALTER TABLE "Automation" ADD CONSTRAINT "Automation_templateId_fkey" FOREIGN KEY ("templateId") REFERENCES "Template"("id") ON DELETE SET NULL ON UPDATE CASCADE;
 
--- AddForeignKey
+ALTER TABLE "Settings" DROP CONSTRAINT IF EXISTS "Settings_userId_fkey";
 ALTER TABLE "Settings" ADD CONSTRAINT "Settings_userId_fkey" FOREIGN KEY ("userId") REFERENCES "User"("id") ON DELETE CASCADE ON UPDATE CASCADE;
 
--- AddForeignKey
+ALTER TABLE "WhatsappSession" DROP CONSTRAINT IF EXISTS "WhatsappSession_userId_fkey";
 ALTER TABLE "WhatsappSession" ADD CONSTRAINT "WhatsappSession_userId_fkey" FOREIGN KEY ("userId") REFERENCES "User"("id") ON DELETE CASCADE ON UPDATE CASCADE;
 
--- AddForeignKey
+ALTER TABLE "WhatsappPoll" DROP CONSTRAINT IF EXISTS "WhatsappPoll_userId_fkey";
 ALTER TABLE "WhatsappPoll" ADD CONSTRAINT "WhatsappPoll_userId_fkey" FOREIGN KEY ("userId") REFERENCES "User"("id") ON DELETE CASCADE ON UPDATE CASCADE;
-
--- CreateIndex
-CREATE UNIQUE INDEX "Order_shopifyOrderId_key" ON "Order"("shopifyOrderId");
