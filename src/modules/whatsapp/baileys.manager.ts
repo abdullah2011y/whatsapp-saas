@@ -34,6 +34,18 @@ const getSHA256 = (text: string): string => {
   return crypto.createHash("sha256").update(text).digest("hex");
 };
 
+const normalizeId = (id: string): string => {
+  let clean = id;
+  if (clean.includes(":")) {
+    clean = clean.split(":")[0];
+  }
+  if (clean.includes("_")) {
+    const parts = clean.split("_");
+    clean = parts[parts.length - 1];
+  }
+  return clean.trim();
+};
+
 // Serialize session directory files to a base64 encoded JSON string
 const serializeSession = (userId: string): string | null => {
   const sessionPath = path.join(process.cwd(), "sessions", userId);
@@ -238,85 +250,7 @@ export const connectUser = async (userId: string) => {
   });
 
   sock.ev.on("messages.upsert", async (m: any) => {
-    const msg = m.messages[0];
-    if (!msg || msg.key.fromMe) return;
-
-    const jid = msg.key.remoteJid;
-    if (!jid) return;
-
-    console.log(`[Baileys Manager] Received message from ${jid}`);
-
-    if (msg.message?.pollUpdateMessage) {
-      const pollUpdate = msg.message.pollUpdateMessage;
-      const creationKey = pollUpdate.pollCreationMessageKey;
-      if (!creationKey || !creationKey.id) return;
-
-      console.log(`[Baileys Manager] Detected poll vote for message ID: ${creationKey.id}`);
-
-      const dbPoll = await prisma.whatsappPoll.findUnique({
-        where: { messageId: creationKey.id }
-      });
-
-      if (!dbPoll) {
-        console.log(`[Baileys Manager] Poll not found in database for message ID: ${creationKey.id}`);
-        return;
-      }
-
-      try {
-        const pollEncKey = Buffer.from(dbPoll.messageSecret, "base64");
-        const creatorJid = jidNormalizedUser(sock.user?.id || "");
-        const voterJid = jidNormalizedUser(msg.key.participant || msg.key.remoteJid || "");
-
-        console.log(`[Baileys Manager] Decrypting vote. Creator JID: ${creatorJid}, Voter JID: ${voterJid}`);
-
-        const decrypted = decryptPollVote(pollUpdate.vote as any, {
-          pollEncKey,
-          pollCreatorJid: creatorJid,
-          pollMsgId: creationKey.id,
-          voterJid
-        });
-
-        console.log(`[Baileys Manager] Decrypted vote payload:`, decrypted);
-
-        if (decrypted && decrypted.selectedOptions && decrypted.selectedOptions.length > 0) {
-          const optionsMap = JSON.parse(dbPoll.optionsJson) as Record<string, string>; // label -> hash
-          
-          const selectedHash = decrypted.selectedOptions[0];
-          const selectedHashHex = typeof selectedHash === "string" 
-            ? selectedHash 
-            : Buffer.from(selectedHash as any).toString("hex");
-          
-          let selectedLabel = "";
-          for (const [label, hash] of Object.entries(optionsMap)) {
-            if (hash === selectedHashHex) {
-              selectedLabel = label;
-              break;
-            }
-          }
-
-          console.log(`[Baileys Manager] Match found for option hash ${selectedHashHex}: "${selectedLabel}"`);
-
-          if (selectedLabel) {
-            const userSettings = await prisma.settings.findUnique({
-              where: { userId: dbPoll.userId }
-            });
-
-            const confirmLabel = userSettings?.pollConfirmLabel || "✅ Yes Confirmed";
-            const cancelLabel = userSettings?.pollCancelLabel || "❌ No Cancelled";
-
-            if (selectedLabel === confirmLabel) {
-              console.log(`[Baileys Manager] Voter confirmed order ${dbPoll.orderId}`);
-              await updateOrderStatus(dbPoll.orderId, "CONFIRMED");
-            } else if (selectedLabel === cancelLabel) {
-              console.log(`[Baileys Manager] Voter cancelled order ${dbPoll.orderId}`);
-              await updateOrderStatus(dbPoll.orderId, "CANCELLED");
-            }
-          }
-        }
-      } catch (err) {
-        console.error(`[Baileys Manager] Error decrypting poll vote:`, err);
-      }
-    }
+    await handleIncomingMessages(userId, sock, m);
   });
 
   return sock;
@@ -418,17 +352,25 @@ export const sendBaileysPoll = async (
       optionsMap[opt] = getSHA256(opt);
     });
 
-    await prisma.whatsappPoll.create({
-      data: {
-        messageId,
-        orderId,
-        userId,
-        optionsJson: JSON.stringify(optionsMap),
-        messageSecret: Buffer.from(messageSecret).toString("base64")
-      }
-    });
+    console.log(`Poll sent message ID: ${messageId}`);
+    let stored = false;
+    try {
+      await prisma.whatsappPoll.create({
+        data: {
+          messageId,
+          orderId,
+          userId,
+          optionsJson: JSON.stringify(optionsMap),
+          messageSecret: Buffer.from(messageSecret).toString("base64"),
+          remoteJid: jid
+        }
+      });
+      stored = true;
+    } catch (dbErr) {
+      console.error(`[Baileys Manager] Failed to store poll in DB:`, dbErr);
+    }
+    console.log(`Poll stored in database: ${stored}`);
 
-    console.log(`[Baileys Manager] Poll sent successfully. Saved to database. Message ID: ${messageId}`);
     return response;
   } catch (err: any) {
     console.log(`[Baileys Manager] Send success: false`);
@@ -563,4 +505,124 @@ export const initializeAllSessions = async () => {
 
 export const setMockConnection = (userId: string, mockSock: any) => {
   activeConnections.set(userId, mockSock);
+};
+
+export const handleIncomingMessages = async (userId: string, sock: any, m: any) => {
+  const msg = m.messages[0];
+  if (!msg || msg.key.fromMe) return;
+
+  const jid = msg.key.remoteJid;
+  if (!jid) return;
+
+  console.log(`[Baileys Manager] Received message from ${jid}`);
+
+  if (msg.message?.pollUpdateMessage) {
+    const pollUpdate = msg.message.pollUpdateMessage;
+    const creationKey = pollUpdate.pollCreationMessageKey;
+    if (!creationKey || !creationKey.id) return;
+
+    const incomingVoteId = creationKey.id;
+    console.log(`Incoming vote message ID: ${incomingVoteId}`);
+
+    const normalizedIncomingId = normalizeId(incomingVoteId);
+
+    // Perform lookup
+    let dbPoll = await prisma.whatsappPoll.findUnique({
+      where: { messageId: incomingVoteId }
+    });
+
+    if (!dbPoll && normalizedIncomingId !== incomingVoteId) {
+      dbPoll = await prisma.whatsappPoll.findUnique({
+        where: { messageId: normalizedIncomingId }
+      });
+    }
+
+    if (!dbPoll) {
+      const allPolls = await prisma.whatsappPoll.findMany();
+      dbPoll = allPolls.find(poll => normalizeId(poll.messageId) === normalizedIncomingId) || null;
+    }
+
+    const dbPollId = dbPoll ? dbPoll.messageId : "null";
+    console.log(`Database poll message ID: ${dbPollId}`);
+
+    // Compare both values
+    console.log(`Comparing IDs - Incoming: ${incomingVoteId}, Database: ${dbPollId}`);
+
+    if (!dbPoll) {
+      console.log(`[Baileys Manager] Poll not found in database for message ID: ${incomingVoteId}`);
+      return;
+    }
+
+    try {
+      const pollEncKey = Buffer.from(dbPoll.messageSecret, "base64");
+      const creatorJid = jidNormalizedUser(sock.user?.id || "");
+      const voterJid = jidNormalizedUser(msg.key.participant || msg.key.remoteJid || "");
+
+      console.log(`[Baileys Manager] Decrypting vote. Creator JID: ${creatorJid}, Voter JID: ${voterJid}`);
+
+      const decrypted = (sock as any).mockDecryptPollVote
+        ? (sock as any).mockDecryptPollVote(pollUpdate.vote as any, {
+            pollEncKey,
+            pollCreatorJid: creatorJid,
+            pollMsgId: creationKey.id,
+            voterJid
+          })
+        : decryptPollVote(pollUpdate.vote as any, {
+            pollEncKey,
+            pollCreatorJid: creatorJid,
+            pollMsgId: creationKey.id,
+            voterJid
+          });
+
+      console.log(`[Baileys Manager] Decrypted vote payload:`, decrypted);
+
+      if (decrypted && decrypted.selectedOptions && decrypted.selectedOptions.length > 0) {
+        const optionsMap = JSON.parse(dbPoll.optionsJson) as Record<string, string>; // label -> hash
+        
+        const selectedHash = decrypted.selectedOptions[0];
+        const selectedHashHex = typeof selectedHash === "string" 
+          ? selectedHash 
+          : Buffer.from(selectedHash as any).toString("hex");
+        
+        let selectedLabel = "";
+        for (const [label, hash] of Object.entries(optionsMap)) {
+          if (hash === selectedHashHex) {
+            selectedLabel = label;
+            break;
+          }
+        }
+
+        console.log(`[Baileys Manager] Match found for option hash ${selectedHashHex}: "${selectedLabel}"`);
+
+        if (selectedLabel) {
+          const cleanLabel = selectedLabel.toLowerCase();
+          let resolvedStatus: "CONFIRMED" | "CANCELLED" | null = null;
+
+          const userSettings = await prisma.settings.findUnique({
+            where: { userId: dbPoll.userId }
+          });
+
+          const confirmLabel = userSettings?.pollConfirmLabel || "✅ Yes Confirmed";
+          const cancelLabel = userSettings?.pollCancelLabel || "❌ No Cancelled";
+
+          if (selectedLabel === confirmLabel || cleanLabel.includes("yes") || cleanLabel.includes("confirm")) {
+            resolvedStatus = "CONFIRMED";
+          } else if (selectedLabel === cancelLabel || cleanLabel.includes("no") || cleanLabel.includes("cancel")) {
+            resolvedStatus = "CANCELLED";
+          }
+
+          if (resolvedStatus) {
+            console.log(`[Baileys Manager] Voter resolved order ${dbPoll.orderId} status: ${resolvedStatus}`);
+            const order = await updateOrderStatus(dbPoll.orderId, resolvedStatus);
+            const orderLabel = order.orderName || `#${order.id.substring(0, 4)}`;
+            console.log(`[Activity Log] Created entry: ${orderLabel} confirmed by ${order.customer} (status: ${resolvedStatus})`);
+          } else {
+            console.log(`[Baileys Manager] Voter selected label "${selectedLabel}" did not match confirm/cancel patterns.`);
+          }
+        }
+      }
+    } catch (err) {
+      console.error(`[Baileys Manager] Error decrypting poll vote:`, err);
+    }
+  }
 };

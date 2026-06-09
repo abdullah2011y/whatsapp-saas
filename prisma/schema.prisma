@@ -168,5 +168,6 @@ model WhatsappPoll {
   user          User     @relation(fields: [userId], references: [id], onDelete: Cascade)
   optionsJson   String   // JSON string storing choice configurations
   messageSecret String   // Cryptographic base64 message secret for decrypting poll votes
+  remoteJid     String?  // The recipient JID
   createdAt     DateTime @default(now())
 }
