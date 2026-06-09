@@ -88,6 +88,14 @@ app.get("/db-debug", async (req, res) => {
     `);
     const tables = tableQuery.map(t => t.table_name);
 
+    // Query columns of Settings and Automation to prove they exist on production
+    const settingsColumnsQuery: any[] = await prisma.$queryRawUnsafe(`
+      SELECT column_name, data_type FROM information_schema.columns WHERE table_name = 'Settings';
+    `);
+    const automationColumnsQuery: any[] = await prisma.$queryRawUnsafe(`
+      SELECT column_name, data_type FROM information_schema.columns WHERE table_name = 'Automation';
+    `);
+
     // Check WhatsappSession model and query count
     let whatsappSessionCount = 0;
     let whatsappSessions: any[] = [];
@@ -109,7 +117,11 @@ app.get("/db-debug", async (req, res) => {
         whatsappSession: whatsappSessionCount
       },
       tables,
-      whatsappSessions
+      whatsappSessions,
+      columns: {
+        settings: settingsColumnsQuery.map(c => ({ name: c.column_name, type: c.data_type })),
+        automation: automationColumnsQuery.map(c => ({ name: c.column_name, type: c.data_type }))
+      }
     });
   } catch (err: any) {
     res.status(500).json({
