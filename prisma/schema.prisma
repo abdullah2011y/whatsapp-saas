@@ -123,7 +123,7 @@ model Settings {
   updatedAt              DateTime @updatedAt
   
   enabledProviders       String   @default("BOTH") // "META", "WEB", "BOTH"
-  defaultProvider        String   @default("ASK")  // "META", "WEB", "ASK"
+  defaultProvider        String   @default("META")  // "META", "WEB"
   
   // Meta Configuration
   metaBusinessAccountId String?
@@ -136,6 +136,9 @@ model Settings {
   // Shopify Webhook Configuration
   shopifyWebhookSecret  String?
   shopifyWebhookStatus  String   @default("INACTIVE") // "ACTIVE", "INACTIVE"
+  shopifyLastWebhookAt      DateTime?
+  shopifyConnectionHealth   String   @default("UNKNOWN") // "HEALTHY", "UNHEALTHY", "UNKNOWN"
+  shopifyStoreDetected      Boolean  @default(false)
   
   // Poll & Method Settings
   confirmationMethod     String   @default("BUTTONS") // "BUTTONS", "POLLS", "CUSTOM"
@@ -152,6 +155,7 @@ model WhatsappSession {
   connected      Boolean   @default(false)
   lastSync       DateTime?
   sessionHealth  String    @default("Healthy") // Healthy, Unhealthy, N/A
+  sessionData    String?
   createdAt      DateTime  @default(now())
   updatedAt      DateTime  @updatedAt
 }

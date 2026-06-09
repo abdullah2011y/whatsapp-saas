@@ -34,6 +34,33 @@ const getSHA256 = (text: string): string => {
   return crypto.createHash("sha256").update(text).digest("hex");
 };
 
+// Serialize session directory files to a base64 encoded JSON string
+const serializeSession = (userId: string): string | null => {
+  const sessionPath = path.join(process.cwd(), "sessions", userId);
+  if (!fs.existsSync(sessionPath)) return null;
+  const files = fs.readdirSync(sessionPath);
+  const data: Record<string, string> = {};
+  for (const file of files) {
+    const filePath = path.join(sessionPath, file);
+    if (fs.statSync(filePath).isFile()) {
+      data[file] = fs.readFileSync(filePath, "base64");
+    }
+  }
+  return JSON.stringify(data);
+};
+
+// Restore session directory files from base64 JSON string
+const deserializeSession = (userId: string, dataStr: string) => {
+  const sessionPath = path.join(process.cwd(), "sessions", userId);
+  if (!fs.existsSync(sessionPath)) {
+    fs.mkdirSync(sessionPath, { recursive: true });
+  }
+  const data = JSON.parse(dataStr) as Record<string, string>;
+  for (const [file, content] of Object.entries(data)) {
+    fs.writeFileSync(path.join(sessionPath, file), Buffer.from(content, "base64"));
+  }
+};
+
 export const getSessionStatus = (userId: string) => {
   const socket = activeConnections.get(userId);
   const status = statusCache.get(userId) || "DISCONNECTED";
@@ -73,6 +100,15 @@ export const disconnectUser = async (userId: string) => {
 
 export const deleteUserSession = async (userId: string) => {
   await disconnectUser(userId);
+  try {
+    await prisma.whatsappSession.upsert({
+      where: { userId },
+      update: { sessionData: null },
+      create: { userId, sessionData: null }
+    });
+  } catch (err) {
+    console.error(`[Baileys Manager] Failed to clear session data from DB for user ${userId}:`, err);
+  }
   const sessionPath = path.join(process.cwd(), "sessions", userId);
   if (fs.existsSync(sessionPath)) {
     try {
@@ -96,6 +132,22 @@ export const connectUser = async (userId: string) => {
   qrCache.delete(userId);
 
   const sessionPath = path.join(process.cwd(), "sessions", userId);
+  
+  // Restore session directory from DB if missing locally
+  if (!fs.existsSync(sessionPath)) {
+    try {
+      const dbSession = await prisma.whatsappSession.findUnique({
+        where: { userId }
+      });
+      if (dbSession && dbSession.sessionData) {
+        console.log(`[Baileys Manager] Restoring session directory from DB for user ${userId}`);
+        deserializeSession(userId, dbSession.sessionData);
+      }
+    } catch (err) {
+      console.error(`[Baileys Manager] Failed to restore session from DB for user ${userId}:`, err);
+    }
+  }
+
   if (!fs.existsSync(sessionPath)) {
     fs.mkdirSync(sessionPath, { recursive: true });
   }
@@ -110,7 +162,21 @@ export const connectUser = async (userId: string) => {
 
   activeConnections.set(userId, sock);
 
-  sock.ev.on("creds.update", saveCreds);
+  sock.ev.on("creds.update", async () => {
+    await saveCreds();
+    try {
+      const dataStr = serializeSession(userId);
+      if (dataStr) {
+        await prisma.whatsappSession.upsert({
+          where: { userId },
+          update: { sessionData: dataStr },
+          create: { userId, sessionData: dataStr }
+        });
+      }
+    } catch (err) {
+      console.error(`[Baileys Manager] Failed to backup session to DB for user ${userId}:`, err);
+    }
+  });
 
   sock.ev.on("connection.update", async (update: any) => {
     const { connection, lastDisconnect, qr } = update;

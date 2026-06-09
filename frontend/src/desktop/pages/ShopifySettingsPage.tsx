@@ -30,6 +30,10 @@ export default function ShopifySettingsPage() {
   const [isGeneratingSecret, setIsGeneratingSecret] = useState(false)
   const [webhookTestResult, setWebhookTestResult] = useState<{ success: boolean; message: string } | null>(null)
 
+  const [shopifyLastWebhookAt, setShopifyLastWebhookAt] = useState<string | null>(null)
+  const [shopifyConnectionHealth, setShopifyConnectionHealth] = useState<string>("UNKNOWN")
+  const [shopifyStoreDetected, setShopifyStoreDetected] = useState<boolean>(false)
+
   const [form, setForm] = useState({
     shopifyDomain: "",
     shopifyWebhookSecret: "",
@@ -55,6 +59,9 @@ export default function ShopifySettingsPage() {
           shopifyWebhookSecret: data.shopifyWebhookSecret || "",
           shopifyWebhookStatus: data.shopifyWebhookStatus || "INACTIVE"
         })
+        setShopifyLastWebhookAt(data.shopifyLastWebhookAt || null)
+        setShopifyConnectionHealth(data.shopifyConnectionHealth || "UNKNOWN")
+        setShopifyStoreDetected(data.shopifyStoreDetected || false)
       }
     } catch (err) {
       console.error("Failed to fetch Shopify settings:", err)
@@ -109,8 +116,10 @@ export default function ShopifySettingsPage() {
       const data = await res.json()
       if (res.ok) {
         setWebhookTestResult({ success: true, message: data.message || "Webhook test order processed successfully!" })
+        await fetchSettings()
       } else {
         setWebhookTestResult({ success: false, message: data.error || "Webhook test failed." })
+        await fetchSettings()
       }
     } catch (err) {
       console.error(err)
@@ -160,6 +169,57 @@ export default function ShopifySettingsPage() {
         <p className="text-muted-foreground text-sm mt-1">
           Configure Shopify webhook verify credentials, store domains, and test connection endpoints.
         </p>
+      </div>
+
+      {/* Gateway Status Indicators */}
+      <div className="grid gap-4 sm:grid-cols-3">
+        {/* Connection Health */}
+        <Card className="bg-black/20 border-border/40 backdrop-blur-sm shadow-[0_4px_20px_rgba(0,0,0,0.15)] hover:border-cyan-500/30 transition-all duration-300">
+          <CardContent className="p-4">
+            <div className="space-y-1">
+              <p className="text-[10px] uppercase font-bold tracking-wider text-muted-foreground">Connection Health</p>
+              <div className="flex items-center gap-2">
+                <span className={`inline-block w-2.5 h-2.5 rounded-full ${
+                  shopifyConnectionHealth === "HEALTHY" 
+                    ? "bg-green-500 shadow-[0_0_8px_#22c55e]" 
+                    : shopifyConnectionHealth === "UNHEALTHY"
+                    ? "bg-red-500 shadow-[0_0_8px_#ef4444]"
+                    : "bg-gray-500 shadow-[0_0_8px_#6b7280]"
+                }`} />
+                <h4 className="text-sm font-bold text-white">
+                  {shopifyConnectionHealth === "HEALTHY" ? "Healthy" : shopifyConnectionHealth === "UNHEALTHY" ? "Unhealthy" : "Unknown"}
+                </h4>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+
+        {/* Store Detected */}
+        <Card className="bg-black/20 border-border/40 backdrop-blur-sm shadow-[0_4px_20px_rgba(0,0,0,0.15)] hover:border-cyan-500/30 transition-all duration-300">
+          <CardContent className="p-4">
+            <div className="space-y-1">
+              <p className="text-[10px] uppercase font-bold tracking-wider text-muted-foreground">Shopify Store Detected</p>
+              <div className="flex items-center gap-2">
+                <span className={`inline-block w-2.5 h-2.5 rounded-full ${shopifyStoreDetected ? "bg-green-500 shadow-[0_0_8px_#22c55e]" : "bg-gray-500 shadow-[0_0_8px_#6b7280]"}`} />
+                <h4 className="text-sm font-bold text-white">
+                  {shopifyStoreDetected ? "Detected" : "Not Detected"}
+                </h4>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+
+        {/* Last Webhook Received */}
+        <Card className="bg-black/20 border-border/40 backdrop-blur-sm shadow-[0_4px_20px_rgba(0,0,0,0.15)] hover:border-cyan-500/30 transition-all duration-300">
+          <CardContent className="p-4">
+            <div className="space-y-1 w-full">
+              <p className="text-[10px] uppercase font-bold tracking-wider text-muted-foreground">Last Webhook Received</p>
+              <h4 className="text-sm font-bold text-cyan-400 font-mono truncate" title={shopifyLastWebhookAt ? new Date(shopifyLastWebhookAt).toLocaleString() : undefined}>
+                {shopifyLastWebhookAt ? new Date(shopifyLastWebhookAt).toLocaleString() : "Never"}
+              </h4>
+            </div>
+          </CardContent>
+        </Card>
       </div>
 
       <form onSubmit={handleSave} className="grid gap-6 lg:grid-cols-12">

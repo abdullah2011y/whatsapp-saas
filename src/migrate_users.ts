@@ -53,7 +53,7 @@ async function main() {
         data: {
           userId: user.id,
           enabledProviders: "BOTH",
-          defaultProvider: "ASK",
+          defaultProvider: "META",
           metaConnected: false,
           confirmationMethod: "BUTTONS",
           pollConfirmLabel: "✅ Yes Confirmed",

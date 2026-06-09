@@ -5,6 +5,7 @@ import { AuthenticatedRequest } from "../auth/auth.middleware";
 import axios from "axios";
 
 export const webhookHandler = async (req: Request, res: Response) => {
+  let userId: string | undefined;
   try {
     console.log("[Shopify Webhook] Shopify order received. Payload ID:", req.body.id);
 
@@ -13,7 +14,7 @@ export const webhookHandler = async (req: Request, res: Response) => {
     const hmacHeader = req.headers["x-shopify-hmac-sha256"] as string | undefined;
 
     // Retrieve settings for the user
-    let userId = req.query.userId as string | undefined;
+    userId = req.query.userId as string | undefined;
     let settings = null;
 
     if (userId) {
@@ -30,25 +31,51 @@ export const webhookHandler = async (req: Request, res: Response) => {
     if (settings && settings.shopifyWebhookSecret) {
       const crypto = await import("crypto");
       const rawBody = (req as any).rawBody;
-      if (!rawBody) {
-        console.warn("[Shopify Webhook] Raw body buffer is missing, signature verification skipped.");
-      } else {
-        const hash = crypto
-          .createHmac("sha256", settings.shopifyWebhookSecret)
-          .update(rawBody)
-          .digest("base64");
-
-        if (hash !== hmacHeader) {
-          console.error("[Shopify Webhook] HMAC validation failed. Expected:", hash, "Got:", hmacHeader);
-          return res.status(401).send("Unauthorized: Invalid Signature");
+      
+      if (!rawBody || !hmacHeader) {
+        console.error("[Shopify Webhook] Strict verification failed: Raw body or HMAC header is missing.");
+        if (userId) {
+          await prisma.settings.update({
+            where: { userId },
+            data: { shopifyConnectionHealth: "UNHEALTHY" }
+          });
         }
-        console.log("[Shopify Webhook] HMAC signature verified successfully.");
+        return res.status(401).send("Unauthorized: Missing signature or body");
       }
+
+      const hash = crypto
+        .createHmac("sha256", settings.shopifyWebhookSecret)
+        .update(rawBody)
+        .digest("base64");
+
+      if (hash !== hmacHeader) {
+        console.error("[Shopify Webhook] STRICT HMAC validation failed. Expected:", hash, "Got:", hmacHeader);
+        if (userId) {
+          await prisma.settings.update({
+            where: { userId },
+            data: { shopifyConnectionHealth: "UNHEALTHY" }
+          });
+        }
+        return res.status(401).send("Unauthorized: Invalid Signature");
+      }
+      console.log("[Shopify Webhook] HMAC signature verified successfully.");
     }
 
     // Process if it's an order creation webhook or if it has an order ID (for local testing)
     if (topic === "orders/create" || req.body.id) {
       await handleShopifyOrderCreate(req.body, shopDomain || settings?.shopifyDomain || undefined);
+      
+      // Update connection metrics on successful webhook processing
+      if (userId) {
+        await prisma.settings.update({
+          where: { userId },
+          data: {
+            shopifyLastWebhookAt: new Date(),
+            shopifyConnectionHealth: "HEALTHY",
+            shopifyStoreDetected: true
+          }
+        });
+      }
     } else {
       console.log("[Shopify Webhook] Ignored payload (not an order creation or missing ID).");
     }
@@ -56,6 +83,16 @@ export const webhookHandler = async (req: Request, res: Response) => {
     res.status(200).send("OK");
   } catch (error) {
     console.error("[Shopify Webhook] Error processing webhook:", error);
+    if (userId) {
+      try {
+        await prisma.settings.update({
+          where: { userId },
+          data: { shopifyConnectionHealth: "UNHEALTHY" }
+        });
+      } catch (dbErr) {
+        console.error("[Shopify Webhook] Failed to update settings error health:", dbErr);
+      }
+    }
     res.status(500).send("Internal Server Error");
   }
 };
@@ -70,7 +107,10 @@ export const getShopifySettingsHandler = async (req: AuthenticatedRequest, res: 
     res.json({
       shopifyDomain: settings?.shopifyDomain || "",
       shopifyWebhookSecret: settings?.shopifyWebhookSecret || "",
-      shopifyWebhookStatus: settings?.shopifyWebhookStatus || "INACTIVE"
+      shopifyWebhookStatus: settings?.shopifyWebhookStatus || "INACTIVE",
+      shopifyLastWebhookAt: settings?.shopifyLastWebhookAt || null,
+      shopifyConnectionHealth: settings?.shopifyConnectionHealth || "UNKNOWN",
+      shopifyStoreDetected: settings?.shopifyStoreDetected || false
     });
   } catch (error: any) {
     res.status(500).json({ error: error.message });
@@ -154,7 +194,7 @@ export const testWebhookHandler = async (req: AuthenticatedRequest, res: Respons
     const localWebhookUrl = `http://localhost:5000/shopify/webhook?userId=${userId}`;
 
     try {
-      const response = await axios.post(localWebhookUrl, payload, {
+      const response = await axios.post(localWebhookUrl, rawBodyStr, {
         headers: {
           "Content-Type": "application/json",
           "x-shopify-topic": "orders/create",
@@ -164,12 +204,29 @@ export const testWebhookHandler = async (req: AuthenticatedRequest, res: Respons
       });
 
       if (response.status === 200) {
+        // Update connection status metrics upon successful connection test
+        await prisma.settings.update({
+          where: { userId },
+          data: {
+            shopifyLastWebhookAt: new Date(),
+            shopifyConnectionHealth: "HEALTHY",
+            shopifyStoreDetected: true
+          }
+        });
         return res.json({ success: true, message: "Webhook test order processed successfully!" });
       } else {
+        await prisma.settings.update({
+          where: { userId },
+          data: { shopifyConnectionHealth: "UNHEALTHY" }
+        });
         return res.status(400).json({ error: "Webhook test failed", details: response.data });
       }
     } catch (apiError: any) {
       console.error("Local webhook test failed:", apiError.message);
+      await prisma.settings.update({
+        where: { userId },
+        data: { shopifyConnectionHealth: "UNHEALTHY" }
+      });
       return res.status(400).json({ error: "Webhook test failed to connect", details: apiError.message });
     }
   } catch (error: any) {
