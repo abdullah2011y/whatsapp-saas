@@ -17,11 +17,13 @@ export const webhookHandler = async (req: Request, res: Response) => {
     userId = req.query.userId as string | undefined;
     let settings = null;
 
+    const cleanShopDomain = shopDomain ? shopDomain.trim().toLowerCase().replace(/^(https?:\/\/)?(www\.)?/, "").replace(/\/+$/, "") : undefined;
+
     if (userId) {
       settings = await prisma.settings.findUnique({ where: { userId } });
-    } else if (shopDomain) {
+    } else if (cleanShopDomain) {
       settings = await prisma.settings.findFirst({
-        where: { shopifyDomain: shopDomain }
+        where: { shopifyDomain: cleanShopDomain }
       });
       if (settings) {
         userId = settings.userId;
@@ -63,7 +65,15 @@ export const webhookHandler = async (req: Request, res: Response) => {
 
     // Process if it's an order creation webhook or if it has an order ID (for local testing)
     if (topic === "orders/create" || req.body.id) {
-      await handleShopifyOrderCreate(req.body, shopDomain || settings?.shopifyDomain || undefined);
+      try {
+        await handleShopifyOrderCreate(req.body, cleanShopDomain || settings?.shopifyDomain || undefined, userId);
+      } catch (err: any) {
+        if (err.message && err.message.includes("No valid user ownership mapped")) {
+          console.error(`[Shopify Webhook] Rejected webhook payload: ${err.message}`);
+          return res.status(400).send(`Bad Request: ${err.message}`);
+        }
+        throw err;
+      }
       
       // Update connection metrics on successful webhook processing
       if (userId) {
@@ -122,16 +132,20 @@ export const saveShopifySettingsHandler = async (req: AuthenticatedRequest, res:
     const userId = req.user?.id!;
     const { shopifyDomain, shopifyWebhookSecret, shopifyWebhookStatus } = req.body;
 
+    const normalizedDomain = shopifyDomain 
+      ? shopifyDomain.trim().toLowerCase().replace(/^(https?:\/\/)?(www\.)?/, "").replace(/\/+$/, "")
+      : null;
+
     const settings = await prisma.settings.upsert({
       where: { userId },
       update: {
-        shopifyDomain,
+        shopifyDomain: normalizedDomain,
         shopifyWebhookSecret,
         shopifyWebhookStatus: shopifyWebhookStatus || "INACTIVE"
       },
       create: {
         userId,
-        shopifyDomain,
+        shopifyDomain: normalizedDomain,
         shopifyWebhookSecret,
         shopifyWebhookStatus: shopifyWebhookStatus || "INACTIVE"
       }

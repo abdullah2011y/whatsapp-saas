@@ -1,18 +1,51 @@
 import prisma from "../../config/database";
 import { triggerAutomation } from "../templates/automation.service";
 
-export const handleShopifyOrderCreate = async (payload: any, shopDomain?: string) => {
+export const handleShopifyOrderCreate = async (payload: any, shopDomain?: string, userId?: string) => {
   const shopifyOrderId = String(payload.id);
 
-  // Find tenant by shop domain
-  let userId = "97e2acb1-0bee-4b31-be9e-3e31f8b4a916"; // Primary user default fallback
-  if (shopDomain) {
-    const settings = await prisma.settings.findFirst({
-      where: { shopifyDomain: shopDomain }
+  let cleanShopDomain = shopDomain ? shopDomain.trim().toLowerCase().replace(/^(https?:\/\/)?(www\.)?/, "").replace(/\/+$/, "") : undefined;
+
+  // 1. Find Settings by shopifyDomain
+  let settings = null;
+  if (cleanShopDomain) {
+    settings = await prisma.settings.findFirst({
+      where: { shopifyDomain: cleanShopDomain }
     });
-    if (settings) {
-      userId = settings.userId;
-    }
+  }
+
+  // 2. Extract settings.userId
+  const settingsUserId = settings?.userId;
+
+  // If userId is passed via webhook query/routing, we use it for checking, otherwise we use settingsUserId
+  const resolvedUserId = settingsUserId || userId;
+
+  // 3. Verify User exists
+  const user = resolvedUserId 
+    ? await prisma.user.findUnique({ where: { id: resolvedUserId } }) 
+    : null;
+
+  // Diagnostic logs
+  console.log(`Resolved userId: ${resolvedUserId || "undefined"}`);
+  console.log(`Resolved shop domain: ${cleanShopDomain || "undefined"}`);
+  console.log(`User exists: ${!!user}`);
+  console.log(`Settings exists: ${!!settings}`);
+
+  console.log(`Webhook shop domain: ${cleanShopDomain || "undefined"}`);
+  console.log(`Settings found: ${!!settings}`);
+  console.log(`Settings userId: ${settingsUserId || "undefined"}`);
+  console.log(`User found: ${!!user}`);
+  console.log(`Order owner: ${user?.id || "undefined"}`);
+
+  // 4. Verify Settings.userId === User.id (and user exists)
+  // If settings exist, settingsUserId must match the existing user.id.
+  // Since we also want to verify that settingsUserId matches the resolvedUserId (if both exist)
+  const isSettingsOwnerValid = settings && user ? settingsUserId === user.id : true;
+  const isUserValid = !!user;
+
+  if (!isUserValid || !resolvedUserId || !isSettingsOwnerValid || (userId && settingsUserId && userId !== settingsUserId)) {
+    console.error(`[Shopify Webhook] Error: Shopify order import failed. Resolved owner user does not exist or settings mapping is invalid.`);
+    throw new Error("No valid user ownership mapped for this Shopify order");
   }
 
   // Check for duplicate
@@ -57,12 +90,12 @@ export const handleShopifyOrderCreate = async (payload: any, shopDomain?: string
   const zip = payload.shipping_address?.zip || null;
   const country = payload.shipping_address?.country || null;
 
-  console.log(`[Shopify Webhook] Saving new order for user ${userId}: ${shopifyOrderId} (${orderName})`);
+  console.log(`[Shopify Webhook] Saving new order for user ${resolvedUserId}: ${shopifyOrderId} (${orderName})`);
 
   // Create new order in Prisma
   const newOrder = await prisma.order.create({
     data: {
-      userId,
+      userId: resolvedUserId,
       shopifyOrderId,
       customer: customerName || "Unknown Customer",
       phone: phone,

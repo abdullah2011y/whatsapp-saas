@@ -100,6 +100,10 @@ router.post("/settings", async (req: AuthenticatedRequest, res: Response) => {
     const userId = req.user?.id!;
     const { enabledProviders, defaultProvider, confirmationMethod, pollConfirmLabel, pollCancelLabel, shopifyDomain, verifyToken } = req.body;
 
+    const normalizedDomain = shopifyDomain 
+      ? shopifyDomain.trim().toLowerCase().replace(/^(https?:\/\/)?(www\.)?/, "").replace(/\/+$/, "")
+      : null;
+
     const settings = await prisma.settings.upsert({
       where: { userId },
       update: {
@@ -108,7 +112,7 @@ router.post("/settings", async (req: AuthenticatedRequest, res: Response) => {
         confirmationMethod,
         pollConfirmLabel,
         pollCancelLabel,
-        shopifyDomain,
+        shopifyDomain: normalizedDomain,
         metaVerifyToken: verifyToken
       },
       create: {
@@ -118,7 +122,7 @@ router.post("/settings", async (req: AuthenticatedRequest, res: Response) => {
         confirmationMethod,
         pollConfirmLabel,
         pollCancelLabel,
-        shopifyDomain,
+        shopifyDomain: normalizedDomain,
         metaVerifyToken: verifyToken
       }
     });
