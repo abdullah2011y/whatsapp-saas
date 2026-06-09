@@ -325,107 +325,51 @@ export const sendBaileysPoll = async (
   console.log(`[Baileys Manager] Message type being sent: ${sentType}`);
   console.log(`[Baileys Manager] Final payload shape:`, JSON.stringify(pollPayload, null, 2));
 
-  try {
-    response = await sock.sendMessage(jid, pollPayload);
-    console.log(`[Baileys Manager] Send success: true`);
-    console.log(`[Baileys Manager] Complete response:`, JSON.stringify(response, null, 2));
-    if (response) {
-      console.log(`Response message key:`, JSON.stringify(response.key));
-      console.log(`Response remoteJid:`, response.key?.remoteJid);
-      console.log(`Response messageId:`, response.key?.id);
-      console.log(`Response status:`, response.status);
-    }
-
-    if (!response) {
-      throw new Error("Failed to send poll message via WhatsApp Web");
-    }
-
-    const messageId = response.key.id;
-    const messageSecret = response.messageContextInfo?.messageSecret;
-
-    if (!messageId || !messageSecret) {
-      throw new Error("Could not retrieve message ID or message secret from sent poll");
-    }
-
-    const optionsMap: Record<string, string> = {};
-    options.forEach(opt => {
-      optionsMap[opt] = getSHA256(opt);
-    });
-
-    console.log(`Poll sent message ID: ${messageId}`);
-    let stored = false;
-    try {
-      await prisma.whatsappPoll.create({
-        data: {
-          messageId,
-          orderId,
-          userId,
-          optionsJson: JSON.stringify(optionsMap),
-          messageSecret: Buffer.from(messageSecret).toString("base64"),
-          remoteJid: jid
-        }
-      });
-      stored = true;
-    } catch (dbErr) {
-      console.error(`[Baileys Manager] Failed to store poll in DB:`, dbErr);
-    }
-    console.log(`Poll stored in database: ${stored}`);
-
-    return response;
-  } catch (err: any) {
-    console.log(`[Baileys Manager] Send success: false`);
-    console.warn(`[Baileys Manager] Poll sending failed. Error: ${err.message || err}. Falling back to normal text confirmation message.`);
-
-    sentType = "TEXT_FALLBACK";
-    
-    // Attempt to load order info for a friendlier text message
-    const order = await prisma.order.findUnique({
-      where: { id: orderId }
-    });
-
-    const fallbackText = order 
-      ? `Dear ${order.customer}, please confirm your order of "${order.product}" (Amount: Rs ${order.amount}) by replying with "Confirm" or "Cancel".`
-      : `Please confirm your order by replying with "Confirm" or "Cancel".`;
-
-    const textPayload = { text: fallbackText };
-
-    console.log(`[Baileys Manager] Provider used: WhatsApp Web (Baileys)`);
-    console.log(`[Baileys Manager] Message type being sent: ${sentType}`);
-    console.log(`[Baileys Manager] Final payload shape:`, JSON.stringify(textPayload, null, 2));
-
-    // Double check exists again for fallback safety
-    let fallbackCheckResult;
-    try {
-      fallbackCheckResult = await sock.onWhatsApp(jid);
-    } catch (checkErr) {
-      console.error(`[Baileys Manager] onWhatsApp check failed for fallback:`, checkErr);
-    }
-    const fallbackExists = fallbackCheckResult && fallbackCheckResult[0] ? fallbackCheckResult[0].exists : false;
-    console.log(`Recipient exists: ${fallbackExists}`);
-
-    if (!fallbackExists) {
-      console.log(`[Baileys Manager] Stop sending: Recipient JID ${jid} does not exist on WhatsApp for fallback.`);
-      throw new Error(`Recipient JID ${jid} does not exist on WhatsApp for fallback`);
-    }
-
-    try {
-      response = await sock.sendMessage(jid, textPayload);
-      console.log(`[Baileys Manager] Send success: true`);
-      console.log(`[Baileys Manager] Complete response:`, JSON.stringify(response, null, 2));
-      if (response) {
-        console.log(`Response message key:`, JSON.stringify(response.key));
-        console.log(`Response remoteJid:`, response.key?.remoteJid);
-        console.log(`Response messageId:`, response.key?.id);
-        console.log(`Response status:`, response.status);
-      }
-      return response;
-    } catch (textErr: any) {
-      console.log(`[Baileys Manager] Send success: false`);
-      console.error(`[Baileys Manager] Fallback text message sending failed:`, textErr.message || textErr);
-      throw textErr;
-    }
+  response = await sock.sendMessage(jid, pollPayload);
+  console.log(`[Baileys Manager] Send success: true`);
+  console.log(`[Baileys Manager] Complete response:`, JSON.stringify(response, null, 2));
+  if (response) {
+    console.log(`Response message key:`, JSON.stringify(response.key));
+    console.log(`Response remoteJid:`, response.key?.remoteJid);
+    console.log(`Response messageId:`, response.key?.id);
+    console.log(`Response status:`, response.status);
   }
-};
+
+  if (!response) {
+    throw new Error("Failed to send poll message via WhatsApp Web");
+  }
+
+  const messageId = response.key.id;
+  const messageSecret = response.messageContextInfo?.messageSecret;
+
+  if (!messageId || !messageSecret) {
+    throw new Error("Could not retrieve message ID or message secret from sent poll");
+  }
+
+  const optionsMap: Record<string, string> = {};
+  options.forEach(opt => {
+    optionsMap[opt] = getSHA256(opt);
+  });
+
+  console.log(`Poll sent message ID: ${messageId}`);
+  
+  await prisma.whatsappPoll.create({
+    data: {
+      messageId,
+      orderId,
+      userId,
+      optionsJson: JSON.stringify(optionsMap),
+      messageSecret: Buffer.from(messageSecret).toString("base64"),
+      remoteJid: jid,
+      provider: "WEB",
+      phoneNumber: normalized
+    }
+  });
+  console.log("Poll stored in database: true");
+  console.log(`Poll mapping saved:\nmessageId: ${messageId}\norderId: ${orderId}`);
+
+  return response;
+};;
 
 export const sendBaileysTextMessage = async (
   userId: string,
@@ -524,29 +468,10 @@ export const handleIncomingMessages = async (userId: string, sock: any, m: any) 
     const incomingVoteId = creationKey.id;
     console.log(`Incoming vote message ID: ${incomingVoteId}`);
 
-    const normalizedIncomingId = normalizeId(incomingVoteId);
-
-    // Perform lookup
-    let dbPoll = await prisma.whatsappPoll.findUnique({
+    // Perform lookup by exact messageId
+    const dbPoll = await prisma.whatsappPoll.findUnique({
       where: { messageId: incomingVoteId }
     });
-
-    if (!dbPoll && normalizedIncomingId !== incomingVoteId) {
-      dbPoll = await prisma.whatsappPoll.findUnique({
-        where: { messageId: normalizedIncomingId }
-      });
-    }
-
-    if (!dbPoll) {
-      const allPolls = await prisma.whatsappPoll.findMany();
-      dbPoll = allPolls.find(poll => normalizeId(poll.messageId) === normalizedIncomingId) || null;
-    }
-
-    const dbPollId = dbPoll ? dbPoll.messageId : "null";
-    console.log(`Database poll message ID: ${dbPollId}`);
-
-    // Compare both values
-    console.log(`Comparing IDs - Incoming: ${incomingVoteId}, Database: ${dbPollId}`);
 
     if (!dbPoll) {
       console.log(`[Baileys Manager] Poll not found in database for message ID: ${incomingVoteId}`);
@@ -593,29 +518,32 @@ export const handleIncomingMessages = async (userId: string, sock: any, m: any) 
         }
 
         console.log(`[Baileys Manager] Match found for option hash ${selectedHashHex}: "${selectedLabel}"`);
+        console.log(`Vote received:\nmessageId: ${incomingVoteId}\nselectedOption: ${selectedLabel}`);
 
         if (selectedLabel) {
           const cleanLabel = selectedLabel.toLowerCase();
           let resolvedStatus: "CONFIRMED" | "CANCELLED" | null = null;
 
-          const userSettings = await prisma.settings.findUnique({
-            where: { userId: dbPoll.userId }
-          });
-
-          const confirmLabel = userSettings?.pollConfirmLabel || "✅ Yes Confirmed";
-          const cancelLabel = userSettings?.pollCancelLabel || "❌ No Cancelled";
-
-          if (selectedLabel === confirmLabel || cleanLabel.includes("yes") || cleanLabel.includes("confirm")) {
+          if (cleanLabel.includes("confirm")) {
             resolvedStatus = "CONFIRMED";
-          } else if (selectedLabel === cancelLabel || cleanLabel.includes("no") || cleanLabel.includes("cancel")) {
+          } else if (cleanLabel.includes("cancel")) {
             resolvedStatus = "CANCELLED";
           }
 
           if (resolvedStatus) {
             console.log(`[Baileys Manager] Voter resolved order ${dbPoll.orderId} status: ${resolvedStatus}`);
-            const order = await updateOrderStatus(dbPoll.orderId, resolvedStatus);
-            const orderLabel = order.orderName || `#${order.id.substring(0, 4)}`;
-            console.log(`[Activity Log] Created entry: ${orderLabel} confirmed by ${order.customer} (status: ${resolvedStatus})`);
+            const order = await prisma.order.findUnique({
+              where: { id: dbPoll.orderId }
+            });
+
+            if (order && order.status === "PENDING") {
+              const updatedOrder = await updateOrderStatus(dbPoll.orderId, resolvedStatus);
+              console.log(`Order updated:\noldStatus: ${order.status}\nnewStatus: ${resolvedStatus}`);
+              const orderLabel = updatedOrder.orderName || `#${updatedOrder.id.substring(0, 4)}`;
+              console.log(`[Activity Log] Created entry: ${orderLabel} confirmed by ${updatedOrder.customer} (status: ${resolvedStatus})`);
+            } else {
+              console.log(`[Baileys Manager] Order status is already ${order?.status || "UNKNOWN"}, not updating status.`);
+            }
           } else {
             console.log(`[Baileys Manager] Voter selected label "${selectedLabel}" did not match confirm/cancel patterns.`);
           }
@@ -625,4 +553,4 @@ export const handleIncomingMessages = async (userId: string, sock: any, m: any) 
       console.error(`[Baileys Manager] Error decrypting poll vote:`, err);
     }
   }
-};
+};;

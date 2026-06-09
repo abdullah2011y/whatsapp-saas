@@ -169,5 +169,7 @@ model WhatsappPoll {
   optionsJson   String   // JSON string storing choice configurations
   messageSecret String   // Cryptographic base64 message secret for decrypting poll votes
   remoteJid     String?  // The recipient JID
+  provider      String   @default("WEB")
+  phoneNumber   String?
   createdAt     DateTime @default(now())
 }
