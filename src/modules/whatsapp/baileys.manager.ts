@@ -343,6 +343,13 @@ export const sendBaileysPoll = async (
   console.log(`[Baileys Manager] POLL_SEND_SUCCESS: Poll sent successfully. messageId: ${messageId}`);
 
   const messageSecret = response.messageContextInfo?.messageSecret || response.message?.messageContextInfo?.messageSecret;
+  const messageContextInfo = response.messageContextInfo || response.message?.messageContextInfo;
+  const pollCreationMessage = response.message?.pollCreationMessage || response.pollCreationMessage;
+
+  console.log(`[Baileys Manager] Verification Info for Sent Poll:`);
+  console.log(`- messageContextInfo:`, JSON.stringify(messageContextInfo, null, 2));
+  console.log(`- pollCreationMessage:`, JSON.stringify(pollCreationMessage, null, 2));
+  console.log(`- messageSecret:`, messageSecret ? Buffer.from(messageSecret).toString("hex") : "undefined");
 
   if (!messageId || !messageSecret) {
     throw new Error(`Could not retrieve message ID or message secret from sent poll. messageId: ${messageId}, messageSecretFound: ${!!messageSecret}`);
@@ -357,13 +364,16 @@ export const sendBaileysPoll = async (
   
   console.log(`[Baileys Manager] POLL_SAVE_ATTEMPT: Attempting to save WhatsappPoll record. orderId: ${orderId}, messageId: ${messageId}, remoteJid: ${jid}`);
   try {
+    const base64Secret = Buffer.from(messageSecret).toString("base64");
+    console.log(`[Baileys Manager] MESSAGE_SECRET_SAVED: Saving message secret to database. messageId: ${messageId}, base64Secret: ${base64Secret}`);
+    
     await prisma.whatsappPoll.create({
       data: {
         messageId,
         orderId,
         userId,
         optionsJson: JSON.stringify(optionsMap),
-        messageSecret: Buffer.from(messageSecret).toString("base64"),
+        messageSecret: base64Secret,
         remoteJid: jid,
         provider: "WEB",
         phoneNumber: normalized,
@@ -482,6 +492,12 @@ export const handleIncomingMessages = async (userId: string, sock: any, m: any) 
   if (msg.message?.pollUpdateMessage) {
     console.log(`[Baileys Manager] POLL_VOTE_RECEIVED: Received a poll vote webhook/event from ${jid}`);
     const pollUpdate = msg.message.pollUpdateMessage;
+    
+    console.log(`[Baileys Manager] Verification Info for Received Poll Vote:`);
+    console.log(`- pollUpdate structure:`, JSON.stringify(pollUpdate, null, 2));
+    console.log(`- pollUpdate.vote:`, JSON.stringify(pollUpdate.vote, null, 2));
+    console.log(`- pollUpdate.pollUpdates:`, JSON.stringify((pollUpdate as any).pollUpdates, null, 2));
+
     const creationKey = pollUpdate.pollCreationMessageKey;
     if (!creationKey || !creationKey.id) return;
 
@@ -503,26 +519,68 @@ export const handleIncomingMessages = async (userId: string, sock: any, m: any) 
 
     try {
       const pollEncKey = Buffer.from(dbPoll.messageSecret, "base64");
-      const creatorJid = jidNormalizedUser(sock.user?.id || "");
-      const voterJid = jidNormalizedUser(msg.key.participant || msg.key.remoteJid || "");
+      console.log(`[Baileys Manager] MESSAGE_SECRET_LOADED: Loaded message secret from database. messageId: ${dbPoll.messageId}, base64Secret: ${dbPoll.messageSecret}`);
 
-      console.log(`[Baileys Manager] Decrypting vote. Creator JID: ${creatorJid}, Voter JID: ${voterJid}`);
+      let decrypted: any = null;
+      let decryptError: any = null;
 
-      const decrypted = (sock as any).mockDecryptPollVote
-        ? (sock as any).mockDecryptPollVote(pollUpdate.vote as any, {
-            pollEncKey,
-            pollCreatorJid: creatorJid,
-            pollMsgId: creationKey.id,
-            voterJid
-          })
-        : decryptPollVote(pollUpdate.vote as any, {
-            pollEncKey,
-            pollCreatorJid: creatorJid,
-            pollMsgId: creationKey.id,
-            voterJid
-          });
+      // Generate candidates for creator and voter JIDs
+      const creatorCandidates = Array.from(new Set([
+        jidNormalizedUser(sock.user?.id || ""),
+        sock.user?.lid ? jidNormalizedUser(sock.user.lid) : null,
+        sock.user?.id ? sock.user.id.split(":")[0] + "@s.whatsapp.net" : null,
+        sock.user?.lid ? sock.user.lid.split(":")[0] + "@lid" : null
+      ].filter(Boolean) as string[]));
+
+      const voterCandidates = Array.from(new Set([
+        msg.key.participant ? jidNormalizedUser(msg.key.participant) : null,
+        msg.key.remoteJid ? jidNormalizedUser(msg.key.remoteJid) : null,
+        msg.key.participant ? msg.key.participant.split(":")[0] + "@s.whatsapp.net" : null,
+        msg.key.remoteJid ? msg.key.remoteJid.split(":")[0] + "@s.whatsapp.net" : null,
+        msg.key.participant ? msg.key.participant.split(":")[0] + "@lid" : null,
+        msg.key.remoteJid ? msg.key.remoteJid.split(":")[0] + "@lid" : null
+      ].filter(Boolean) as string[]));
+
+      console.log(`[Baileys Manager] Creator JID candidates:`, creatorCandidates);
+      console.log(`[Baileys Manager] Voter JID candidates:`, voterCandidates);
+
+      for (const creatorJid of creatorCandidates) {
+        for (const voterJid of voterCandidates) {
+          try {
+            console.log(`[Baileys Manager] POLL_DECRYPT_ATTEMPT: Decrypting vote with Creator: ${creatorJid}, Voter: ${voterJid}`);
+            const result = (sock as any).mockDecryptPollVote
+              ? (sock as any).mockDecryptPollVote(pollUpdate.vote as any, {
+                  pollEncKey,
+                  pollCreatorJid: creatorJid,
+                  pollMsgId: creationKey.id,
+                  voterJid
+                })
+              : decryptPollVote(pollUpdate.vote as any, {
+                  pollEncKey,
+                  pollCreatorJid: creatorJid,
+                  pollMsgId: creationKey.id,
+                  voterJid
+                });
+            if (result) {
+              decrypted = result;
+              console.log(`[Baileys Manager] POLL_DECRYPT_SUCCESS: Decrypted vote successfully with Creator: ${creatorJid}, Voter: ${voterJid}`);
+              break;
+            }
+          } catch (err: any) {
+            decryptError = err;
+            console.log(`[Baileys Manager] Decrypt attempt failed for Creator: ${creatorJid}, Voter: ${voterJid}. Error: ${err.message || err}`);
+          }
+        }
+        if (decrypted) break;
+      }
+
+      if (!decrypted) {
+        console.error(`[Baileys Manager] POLL_DECRYPT_FAILED: All decryption attempts failed for message ID: ${incomingVoteId}. Error: ${decryptError?.message || decryptError}`);
+        return;
+      }
 
       console.log(`[Baileys Manager] Decrypted vote payload:`, decrypted);
+      console.log(`- pollUpdate.selectedOptions:`, JSON.stringify(decrypted.selectedOptions, null, 2));
 
       if (decrypted && decrypted.selectedOptions && decrypted.selectedOptions.length > 0) {
         const optionsMap = JSON.parse(dbPoll.optionsJson) as Record<string, string>; // label -> hash
