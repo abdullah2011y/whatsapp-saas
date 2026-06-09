@@ -342,44 +342,84 @@ export const sendBaileysPoll = async (
 
   console.log(`[Baileys Manager] Sending poll confirmation to ${cleanPhone} for order ${orderId}`);
 
-  const pollCreationMessage = {
-    name: roseQuestion,
-    options: options.map(opt => ({ optionName: opt })),
-    selectableOptionsCount: 1
+  const pollPayload = {
+    poll: {
+      name: roseQuestion,
+      values: options,
+      selectableCount: 1
+    }
   };
 
-  const response = await sock.sendMessage(cleanPhone, {
-    pollCreationMessage
-  });
+  let response: any;
+  let sentType = "POLL";
 
-  if (!response) {
-    throw new Error("Failed to send poll message via WhatsApp Web");
-  }
+  console.log(`[Baileys Manager] Provider used: WhatsApp Web (Baileys)`);
+  console.log(`[Baileys Manager] Message type being sent: ${sentType}`);
+  console.log(`[Baileys Manager] Final payload shape:`, JSON.stringify(pollPayload, null, 2));
 
-  const messageId = response.key.id;
-  const messageSecret = response.messageContextInfo?.messageSecret;
+  try {
+    response = await sock.sendMessage(cleanPhone, pollPayload);
+    console.log(`[Baileys Manager] Send success: true`);
 
-  if (!messageId || !messageSecret) {
-    throw new Error("Could not retrieve message ID or message secret from sent poll");
-  }
-
-  const optionsMap: Record<string, string> = {};
-  options.forEach(opt => {
-    optionsMap[opt] = getSHA256(opt);
-  });
-
-  await prisma.whatsappPoll.create({
-    data: {
-      messageId,
-      orderId,
-      userId,
-      optionsJson: JSON.stringify(optionsMap),
-      messageSecret: Buffer.from(messageSecret).toString("base64")
+    if (!response) {
+      throw new Error("Failed to send poll message via WhatsApp Web");
     }
-  });
 
-  console.log(`[Baileys Manager] Poll sent successfully. Saved to database. Message ID: ${messageId}`);
-  return response;
+    const messageId = response.key.id;
+    const messageSecret = response.messageContextInfo?.messageSecret;
+
+    if (!messageId || !messageSecret) {
+      throw new Error("Could not retrieve message ID or message secret from sent poll");
+    }
+
+    const optionsMap: Record<string, string> = {};
+    options.forEach(opt => {
+      optionsMap[opt] = getSHA256(opt);
+    });
+
+    await prisma.whatsappPoll.create({
+      data: {
+        messageId,
+        orderId,
+        userId,
+        optionsJson: JSON.stringify(optionsMap),
+        messageSecret: Buffer.from(messageSecret).toString("base64")
+      }
+    });
+
+    console.log(`[Baileys Manager] Poll sent successfully. Saved to database. Message ID: ${messageId}`);
+    return response;
+  } catch (err: any) {
+    console.log(`[Baileys Manager] Send success: false`);
+    console.warn(`[Baileys Manager] Poll sending failed. Error: ${err.message || err}. Falling back to normal text confirmation message.`);
+
+    sentType = "TEXT_FALLBACK";
+    
+    // Attempt to load order info for a friendlier text message
+    const order = await prisma.order.findUnique({
+      where: { id: orderId }
+    });
+
+    const fallbackText = order 
+      ? `Dear ${order.customer}, please confirm your order of "${order.product}" (Amount: Rs ${order.amount}) by replying with "Confirm" or "Cancel".`
+      : `Please confirm your order by replying with "Confirm" or "Cancel".`;
+
+    const textPayload = { text: fallbackText };
+
+    console.log(`[Baileys Manager] Provider used: WhatsApp Web (Baileys)`);
+    console.log(`[Baileys Manager] Message type being sent: ${sentType}`);
+    console.log(`[Baileys Manager] Final payload shape:`, JSON.stringify(textPayload, null, 2));
+
+    try {
+      response = await sock.sendMessage(cleanPhone, textPayload);
+      console.log(`[Baileys Manager] Send success: true`);
+      return response;
+    } catch (textErr: any) {
+      console.log(`[Baileys Manager] Send success: false`);
+      console.error(`[Baileys Manager] Fallback text message sending failed:`, textErr.message || textErr);
+      throw textErr;
+    }
+  }
 };
 
 export const sendBaileysTextMessage = async (
@@ -420,4 +460,8 @@ export const initializeAllSessions = async () => {
   } catch (err) {
     console.error("[Baileys Manager] Error during sessions restoration:", err);
   }
+};
+
+export const setMockConnection = (userId: string, mockSock: any) => {
+  activeConnections.set(userId, mockSock);
 };
