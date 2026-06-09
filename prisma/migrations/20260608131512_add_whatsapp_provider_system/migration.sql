@@ -34,7 +34,7 @@ ALTER TABLE "Order"
   ADD COLUMN IF NOT EXISTS "userId" TEXT,
   ADD COLUMN IF NOT EXISTS "zip" TEXT;
 
--- Safe conversion of status column from TEXT to OrderStatus enum (non-destructive)
+-- Safe conversion of status column from TEXT to OrderStatus enum
 DO $$
 BEGIN
     IF (SELECT data_type FROM information_schema.columns WHERE table_name = 'Order' AND column_name = 'status') = 'character varying' 
@@ -43,7 +43,7 @@ BEGIN
     END IF;
 END$$;
 
--- 3. Create Tables Safely (IF NOT EXISTS)
+-- 3. Create/Alter User, Template, Automation, Settings Tables Safely
 CREATE TABLE IF NOT EXISTS "User" (
     "id" TEXT NOT NULL,
     "name" TEXT NOT NULL,
@@ -54,9 +54,9 @@ CREATE TABLE IF NOT EXISTS "User" (
     CONSTRAINT "User_pkey" PRIMARY KEY ("id")
 );
 
+-- Ensure Template has userId
 CREATE TABLE IF NOT EXISTS "Template" (
     "id" TEXT NOT NULL,
-    "userId" TEXT,
     "name" TEXT NOT NULL,
     "content" TEXT NOT NULL,
     "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
@@ -64,10 +64,11 @@ CREATE TABLE IF NOT EXISTS "Template" (
 
     CONSTRAINT "Template_pkey" PRIMARY KEY ("id")
 );
+ALTER TABLE "Template" ADD COLUMN IF NOT EXISTS "userId" TEXT;
 
+-- Ensure Automation has userId
 CREATE TABLE IF NOT EXISTS "Automation" (
     "id" TEXT NOT NULL,
-    "userId" TEXT,
     "trigger" TEXT NOT NULL,
     "isEnabled" BOOLEAN NOT NULL DEFAULT false,
     "templateId" TEXT,
@@ -76,30 +77,34 @@ CREATE TABLE IF NOT EXISTS "Automation" (
 
     CONSTRAINT "Automation_pkey" PRIMARY KEY ("id")
 );
+ALTER TABLE "Automation" ADD COLUMN IF NOT EXISTS "userId" TEXT;
 
+-- Ensure Settings has userId and other columns
 CREATE TABLE IF NOT EXISTS "Settings" (
     "id" TEXT NOT NULL,
-    "userId" TEXT NOT NULL,
     "whatsappNumber" TEXT,
     "isConnected" BOOLEAN NOT NULL DEFAULT false,
     "lastSync" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
     "updatedAt" TIMESTAMP(3) NOT NULL,
-    "enabledProviders" TEXT NOT NULL DEFAULT 'BOTH',
-    "defaultProvider" TEXT NOT NULL DEFAULT 'ASK',
-    "metaBusinessAccountId" TEXT,
-    "metaPhoneNumberId" TEXT,
-    "metaAccessToken" TEXT,
-    "metaVerifyToken" TEXT,
-    "metaConnected" BOOLEAN NOT NULL DEFAULT false,
-    "shopifyDomain" TEXT,
-    "confirmationMethod" TEXT NOT NULL DEFAULT 'BUTTONS',
-    "pollConfirmLabel" TEXT NOT NULL DEFAULT '✅ Yes Confirmed',
-    "pollCancelLabel" TEXT NOT NULL DEFAULT '❌ No Cancelled',
-    "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
 
     CONSTRAINT "Settings_pkey" PRIMARY KEY ("id")
 );
+ALTER TABLE "Settings" 
+  ADD COLUMN IF NOT EXISTS "userId" TEXT,
+  ADD COLUMN IF NOT EXISTS "enabledProviders" TEXT NOT NULL DEFAULT 'BOTH',
+  ADD COLUMN IF NOT EXISTS "defaultProvider" TEXT NOT NULL DEFAULT 'ASK',
+  ADD COLUMN IF NOT EXISTS "metaBusinessAccountId" TEXT,
+  ADD COLUMN IF NOT EXISTS "metaPhoneNumberId" TEXT,
+  ADD COLUMN IF NOT EXISTS "metaAccessToken" TEXT,
+  ADD COLUMN IF NOT EXISTS "metaVerifyToken" TEXT,
+  ADD COLUMN IF NOT EXISTS "metaConnected" BOOLEAN NOT NULL DEFAULT false,
+  ADD COLUMN IF NOT EXISTS "shopifyDomain" TEXT,
+  ADD COLUMN IF NOT EXISTS "confirmationMethod" TEXT NOT NULL DEFAULT 'BUTTONS',
+  ADD COLUMN IF NOT EXISTS "pollConfirmLabel" TEXT NOT NULL DEFAULT '✅ Yes Confirmed',
+  ADD COLUMN IF NOT EXISTS "pollCancelLabel" TEXT NOT NULL DEFAULT '❌ No Cancelled',
+  ADD COLUMN IF NOT EXISTS "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP;
 
+-- 4. Create New Whatsapp Tables Safely
 CREATE TABLE IF NOT EXISTS "WhatsappSession" (
     "id" TEXT NOT NULL,
     "userId" TEXT NOT NULL,
@@ -125,7 +130,7 @@ CREATE TABLE IF NOT EXISTS "WhatsappPoll" (
     CONSTRAINT "WhatsappPoll_pkey" PRIMARY KEY ("id")
 );
 
--- 4. Create Indexes Safely
+-- 5. Create Indexes Safely
 DROP INDEX IF EXISTS "User_email_key";
 CREATE UNIQUE INDEX "User_email_key" ON "User"("email");
 
@@ -152,7 +157,7 @@ CREATE INDEX IF NOT EXISTS "Order_orderNumber_idx" ON "Order"("orderNumber");
 DROP INDEX IF EXISTS "Order_shopifyOrderId_key";
 CREATE UNIQUE INDEX "Order_shopifyOrderId_key" ON "Order"("shopifyOrderId");
 
--- 5. Foreign Key Constraints Safely
+-- 6. Foreign Key Constraints Safely
 ALTER TABLE "Order" DROP CONSTRAINT IF EXISTS "Order_userId_fkey";
 ALTER TABLE "Order" ADD CONSTRAINT "Order_userId_fkey" FOREIGN KEY ("userId") REFERENCES "User"("id") ON DELETE CASCADE ON UPDATE CASCADE;
 
