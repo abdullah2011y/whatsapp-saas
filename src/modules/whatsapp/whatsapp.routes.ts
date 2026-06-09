@@ -7,13 +7,125 @@ import {
   connectUser,
   disconnectUser,
   deleteUserSession,
-  getSessionStatus
+  getSessionStatus,
+  normalizePhoneNumber,
+  getJid
 } from "./baileys.manager";
 
 const router = Router();
 const prisma = new PrismaClient();
 
-// Apply auth middleware to all routes in this router
+// POST /whatsapp/debug-send (Public debug endpoint)
+router.post("/debug-send", async (req: any, res: Response) => {
+  try {
+    const { phone } = req.body;
+    if (!phone) {
+      return res.status(400).json({ error: "Phone number is required in request body" });
+    }
+
+    // Resolve userId: try current user or fallback to first connected session
+    let userId: string | null = null;
+    const authHeader = req.headers.authorization;
+    if (authHeader && authHeader.startsWith("Bearer ")) {
+      try {
+        const token = authHeader.split(" ")[1];
+        const JWT_SECRET = process.env.JWT_SECRET || "fallback_secret";
+        const decoded = (await import("jsonwebtoken")).default.verify(token, JWT_SECRET) as { id: string; email: string };
+        userId = decoded.id;
+      } catch (err) {
+        console.warn("[Debug Send] Auth header present but invalid, proceeding to fallback:", err);
+      }
+    }
+
+    if (!userId) {
+      const activeSession = await prisma.whatsappSession.findFirst({
+        where: { connected: true }
+      });
+      if (activeSession) {
+        userId = activeSession.userId;
+        console.log(`[Debug Send] Resolved fallback userId: ${userId} from active session`);
+      }
+    }
+
+    if (!userId) {
+      return res.status(400).json({ error: "No active connected WhatsApp Web session found on the system." });
+    }
+
+    const sock = await connectUser(userId);
+    if (!sock) {
+      return res.status(400).json({ error: "WhatsApp Web session could not be retrieved or is not connected." });
+    }
+
+    const normalized = normalizePhoneNumber(phone);
+    const jid = getJid(phone);
+
+    console.log(`Original phone: ${phone}`);
+    console.log(`Normalized phone: ${normalized}`);
+    console.log(`Final JID: ${jid}`);
+
+    let checkResult;
+    try {
+      checkResult = await sock.onWhatsApp(jid);
+    } catch (err: any) {
+      console.error(`[Debug Send] onWhatsApp check failed:`, err);
+      return res.status(500).json({ error: "Failed to perform onWhatsApp check", details: err.message || err });
+    }
+
+    const exists = checkResult && checkResult[0] ? checkResult[0].exists : false;
+    console.log(`Recipient exists: ${exists}`);
+
+    if (!exists) {
+      console.log(`[Debug Send] Stop sending: Recipient JID ${jid} does not exist on WhatsApp.`);
+      return res.status(400).json({ 
+        error: `Recipient JID ${jid} does not exist on WhatsApp`,
+        originalPhone: phone,
+        normalizedPhone: normalized,
+        finalJid: jid,
+        exists: false
+      });
+    }
+
+    const textPayload = { text: "Debug test message from SaaS" };
+    const sentType = "TEXT_DEBUG";
+
+    console.log(`[Debug Send] Provider used: WhatsApp Web (Baileys)`);
+    console.log(`[Debug Send] Message type being sent: ${sentType}`);
+    console.log(`[Debug Send] Final payload shape:`, JSON.stringify(textPayload, null, 2));
+
+    try {
+      const response = await sock.sendMessage(jid, textPayload);
+      console.log(`[Debug Send] Send success: true`);
+      console.log(`[Debug Send] Complete response:`, JSON.stringify(response, null, 2));
+      
+      console.log(`Response message key:`, JSON.stringify(response?.key));
+      console.log(`Response remoteJid:`, response?.key?.remoteJid);
+      console.log(`Response messageId:`, response?.key?.id);
+      console.log(`Response status:`, response?.status);
+
+      return res.json({
+        success: true,
+        originalPhone: phone,
+        normalizedPhone: normalized,
+        finalJid: jid,
+        exists: true,
+        response
+      });
+    } catch (sendErr: any) {
+      console.log(`[Debug Send] Send success: false`);
+      console.error(`[Debug Send] sendMessage error:`, sendErr.message || sendErr);
+      return res.status(500).json({
+        success: false,
+        error: "Failed to send message via Baileys",
+        details: sendErr.message || sendErr
+      });
+    }
+  } catch (error: any) {
+    console.error("[Debug Send] Unexpected error:", error);
+    res.status(500).json({ error: "Internal server error", details: error.message || error });
+  }
+});
+
+// Apply auth middleware to all routes below in this router
 router.use(authMiddleware as any);
 
 // GET /whatsapp/overview

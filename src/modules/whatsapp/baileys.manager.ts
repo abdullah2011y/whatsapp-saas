@@ -322,6 +322,26 @@ export const connectUser = async (userId: string) => {
   return sock;
 };
 
+export const normalizePhoneNumber = (phone: string): string => {
+  let clean = phone.replace(/\D/g, "");
+  if (clean.startsWith("00")) {
+    clean = clean.substring(2);
+  }
+  if (clean.startsWith("9203")) {
+    clean = "92" + clean.substring(3);
+  } else if (clean.startsWith("03") && clean.length === 11) {
+    clean = "92" + clean.substring(1);
+  } else if (clean.startsWith("3") && clean.length === 10) {
+    clean = "92" + clean;
+  }
+  return clean;
+};
+
+export const getJid = (phone: string): string => {
+  const normalized = normalizePhoneNumber(phone);
+  return `${normalized}@s.whatsapp.net`;
+};
+
 export const sendBaileysPoll = async (
   userId: string,
   phone: string,
@@ -335,18 +355,32 @@ export const sendBaileysPoll = async (
     throw new Error("WhatsApp Web is not connected for this user");
   }
 
-  let cleanPhone = phone.replace(/\D/g, "");
-  if (!cleanPhone.endsWith("@s.whatsapp.net")) {
-    cleanPhone = `${cleanPhone}@s.whatsapp.net`;
-  }
+  const normalized = normalizePhoneNumber(phone);
+  const jid = getJid(phone);
 
-  console.log(`[Baileys Manager] Sending poll confirmation to ${cleanPhone} for order ${orderId}`);
+  console.log(`Original phone: ${phone}`);
+  console.log(`Normalized phone: ${normalized}`);
+  console.log(`Final JID: ${jid}`);
+
+  let checkResult;
+  try {
+    checkResult = await sock.onWhatsApp(jid);
+  } catch (err: any) {
+    console.error(`[Baileys Manager] onWhatsApp check failed:`, err);
+  }
+  const exists = checkResult && checkResult[0] ? checkResult[0].exists : false;
+  console.log(`Recipient exists: ${exists}`);
+
+  if (!exists) {
+    console.log(`[Baileys Manager] Stop sending: Recipient JID ${jid} does not exist on WhatsApp.`);
+    throw new Error(`Recipient JID ${jid} does not exist on WhatsApp`);
+  }
 
   const pollPayload = {
     poll: {
       name: roseQuestion,
       values: options,
-      selectableCount: 1
+      selectableCount: 0
     }
   };
 
@@ -358,8 +392,15 @@ export const sendBaileysPoll = async (
   console.log(`[Baileys Manager] Final payload shape:`, JSON.stringify(pollPayload, null, 2));
 
   try {
-    response = await sock.sendMessage(cleanPhone, pollPayload);
+    response = await sock.sendMessage(jid, pollPayload);
     console.log(`[Baileys Manager] Send success: true`);
+    console.log(`[Baileys Manager] Complete response:`, JSON.stringify(response, null, 2));
+    if (response) {
+      console.log(`Response message key:`, JSON.stringify(response.key));
+      console.log(`Response remoteJid:`, response.key?.remoteJid);
+      console.log(`Response messageId:`, response.key?.id);
+      console.log(`Response status:`, response.status);
+    }
 
     if (!response) {
       throw new Error("Failed to send poll message via WhatsApp Web");
@@ -410,9 +451,31 @@ export const sendBaileysPoll = async (
     console.log(`[Baileys Manager] Message type being sent: ${sentType}`);
     console.log(`[Baileys Manager] Final payload shape:`, JSON.stringify(textPayload, null, 2));
 
+    // Double check exists again for fallback safety
+    let fallbackCheckResult;
     try {
-      response = await sock.sendMessage(cleanPhone, textPayload);
+      fallbackCheckResult = await sock.onWhatsApp(jid);
+    } catch (checkErr) {
+      console.error(`[Baileys Manager] onWhatsApp check failed for fallback:`, checkErr);
+    }
+    const fallbackExists = fallbackCheckResult && fallbackCheckResult[0] ? fallbackCheckResult[0].exists : false;
+    console.log(`Recipient exists: ${fallbackExists}`);
+
+    if (!fallbackExists) {
+      console.log(`[Baileys Manager] Stop sending: Recipient JID ${jid} does not exist on WhatsApp for fallback.`);
+      throw new Error(`Recipient JID ${jid} does not exist on WhatsApp for fallback`);
+    }
+
+    try {
+      response = await sock.sendMessage(jid, textPayload);
       console.log(`[Baileys Manager] Send success: true`);
+      console.log(`[Baileys Manager] Complete response:`, JSON.stringify(response, null, 2));
+      if (response) {
+        console.log(`Response message key:`, JSON.stringify(response.key));
+        console.log(`Response remoteJid:`, response.key?.remoteJid);
+        console.log(`Response messageId:`, response.key?.id);
+        console.log(`Response status:`, response.status);
+      }
       return response;
     } catch (textErr: any) {
       console.log(`[Baileys Manager] Send success: false`);
@@ -433,14 +496,50 @@ export const sendBaileysTextMessage = async (
     throw new Error("WhatsApp Web is not connected for this user");
   }
 
-  let cleanPhone = phone.replace(/\D/g, "");
-  if (!cleanPhone.endsWith("@s.whatsapp.net")) {
-    cleanPhone = `${cleanPhone}@s.whatsapp.net`;
+  const normalized = normalizePhoneNumber(phone);
+  const jid = getJid(phone);
+
+  console.log(`Original phone: ${phone}`);
+  console.log(`Normalized phone: ${normalized}`);
+  console.log(`Final JID: ${jid}`);
+
+  let checkResult;
+  try {
+    checkResult = await sock.onWhatsApp(jid);
+  } catch (err) {
+    console.error(`[Baileys Manager] onWhatsApp check failed:`, err);
+  }
+  const exists = checkResult && checkResult[0] ? checkResult[0].exists : false;
+  console.log(`Recipient exists: ${exists}`);
+
+  if (!exists) {
+    console.log(`[Baileys Manager] Stop sending: Recipient JID ${jid} does not exist on WhatsApp.`);
+    throw new Error(`Recipient JID ${jid} does not exist on WhatsApp`);
   }
 
-  console.log(`[Baileys Manager] Sending text message to ${cleanPhone}`);
-  const response = await sock.sendMessage(cleanPhone, { text: bodyText });
-  return response;
+  const textPayload = { text: bodyText };
+  const sentType = "TEXT";
+
+  console.log(`[Baileys Manager] Provider used: WhatsApp Web (Baileys)`);
+  console.log(`[Baileys Manager] Message type being sent: ${sentType}`);
+  console.log(`[Baileys Manager] Final payload shape:`, JSON.stringify(textPayload, null, 2));
+
+  try {
+    const response = await sock.sendMessage(jid, textPayload);
+    console.log(`[Baileys Manager] Send success: true`);
+    console.log(`[Baileys Manager] Complete response:`, JSON.stringify(response, null, 2));
+    if (response) {
+      console.log(`Response message key:`, JSON.stringify(response.key));
+      console.log(`Response remoteJid:`, response.key?.remoteJid);
+      console.log(`Response messageId:`, response.key?.id);
+      console.log(`Response status:`, response.status);
+    }
+    return response;
+  } catch (err: any) {
+    console.log(`[Baileys Manager] Send success: false`);
+    console.error(`[Baileys Manager] Text message sending failed:`, err.message || err);
+    throw err;
+  }
 };
 
 export const initializeAllSessions = async () => {
