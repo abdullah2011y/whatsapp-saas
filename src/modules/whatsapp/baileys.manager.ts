@@ -340,10 +340,12 @@ export const sendBaileysPoll = async (
   }
 
   const messageId = response.key.id;
-  const messageSecret = response.messageContextInfo?.messageSecret;
+  console.log(`[Baileys Manager] POLL_SEND_SUCCESS: Poll sent successfully. messageId: ${messageId}`);
+
+  const messageSecret = response.messageContextInfo?.messageSecret || response.message?.messageContextInfo?.messageSecret;
 
   if (!messageId || !messageSecret) {
-    throw new Error("Could not retrieve message ID or message secret from sent poll");
+    throw new Error(`Could not retrieve message ID or message secret from sent poll. messageId: ${messageId}, messageSecretFound: ${!!messageSecret}`);
   }
 
   const optionsMap: Record<string, string> = {};
@@ -353,20 +355,36 @@ export const sendBaileysPoll = async (
 
   console.log(`Poll sent message ID: ${messageId}`);
   
-  await prisma.whatsappPoll.create({
-    data: {
-      messageId,
-      orderId,
-      userId,
-      optionsJson: JSON.stringify(optionsMap),
-      messageSecret: Buffer.from(messageSecret).toString("base64"),
-      remoteJid: jid,
-      provider: "WEB",
-      phoneNumber: normalized
+  console.log(`[Baileys Manager] POLL_SAVE_ATTEMPT: Attempting to save WhatsappPoll record. orderId: ${orderId}, messageId: ${messageId}, remoteJid: ${jid}`);
+  try {
+    await prisma.whatsappPoll.create({
+      data: {
+        messageId,
+        orderId,
+        userId,
+        optionsJson: JSON.stringify(optionsMap),
+        messageSecret: Buffer.from(messageSecret).toString("base64"),
+        remoteJid: jid,
+        provider: "WEB",
+        phoneNumber: normalized,
+        createdAt: new Date()
+      }
+    });
+
+    // Verify database record exists immediately after poll creation
+    const verifyPoll = await prisma.whatsappPoll.findUnique({
+      where: { messageId }
+    });
+    if (verifyPoll) {
+      console.log(`[Baileys Manager] POLL_SAVE_SUCCESS: WhatsappPoll record saved and verified in database. messageId: ${messageId}`);
+    } else {
+      console.error(`[Baileys Manager] POLL_SAVE_FAILED: Verification query returned null after save. messageId: ${messageId}`);
+      throw new Error("Verification query returned null after save");
     }
-  });
-  console.log("Poll stored in database: true");
-  console.log(`Poll mapping saved:\nmessageId: ${messageId}\norderId: ${orderId}`);
+  } catch (error: any) {
+    console.error(`[Baileys Manager] POLL_SAVE_FAILED: Failed to save WhatsappPoll record. Error: ${error.message}`);
+    throw error;
+  }
 
   return response;
 };;
@@ -470,6 +488,7 @@ export const handleIncomingMessages = async (userId: string, sock: any, m: any) 
     const incomingVoteId = creationKey.id;
     console.log(`Incoming vote message ID: ${incomingVoteId}`);
 
+    console.log(`[Baileys Manager] LOOKUP_MESSAGE_ID: Attempting lookup for message ID: ${incomingVoteId}`);
     // Perform lookup by exact messageId
     const dbPoll = await prisma.whatsappPoll.findUnique({
       where: { messageId: incomingVoteId }
