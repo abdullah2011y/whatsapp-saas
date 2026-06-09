@@ -54,7 +54,70 @@ app.use("/automations", automationRoutes);
 app.get("/webhook", webhookGet);
 app.post("/webhook", webhookPost);
 
+import prisma from "./config/database";
 
+app.get("/db-debug", async (req, res) => {
+  const token = req.query.token;
+  if (token !== "byteforge_secure_recovery_2026") {
+    return res.status(401).json({ error: "Unauthorized" });
+  }
+
+  try {
+    const usersCount = await prisma.user.count();
+    const ordersCount = await prisma.order.count();
+    const confirmationsCount = await prisma.order.count({
+      where: { status: "CONFIRMED" }
+    });
+    const pendingCount = await prisma.order.count({
+      where: { status: "PENDING" }
+    });
+    const cancelledCount = await prisma.order.count({
+      where: { status: "CANCELLED" }
+    });
+
+    const orders = await prisma.order.findMany();
+    const uniquePhones = new Set(orders.map(o => o.phone).filter(Boolean));
+    const customersCount = uniquePhones.size;
+
+    let activitiesCount = orders.length; // NEW_ORDER activity for each
+    activitiesCount += orders.filter(o => o.status === "CONFIRMED" || o.status === "CANCELLED").length;
+
+    // Check tables in DB
+    const tableQuery: any[] = await prisma.$queryRawUnsafe(`
+      SELECT table_name FROM information_schema.tables WHERE table_schema = 'public' AND table_type = 'BASE TABLE';
+    `);
+    const tables = tableQuery.map(t => t.table_name);
+
+    // Check WhatsappSession model and query count
+    let whatsappSessionCount = 0;
+    let whatsappSessions: any[] = [];
+    if (tables.includes("WhatsappSession")) {
+      whatsappSessionCount = await prisma.whatsappSession.count();
+      whatsappSessions = await prisma.whatsappSession.findMany();
+    }
+
+    res.json({
+      success: true,
+      counts: {
+        users: usersCount,
+        orders: ordersCount,
+        customers: customersCount,
+        confirmations: confirmationsCount,
+        pending: pendingCount,
+        cancelled: cancelledCount,
+        activities: activitiesCount,
+        whatsappSession: whatsappSessionCount
+      },
+      tables,
+      whatsappSessions
+    });
+  } catch (err: any) {
+    res.status(500).json({
+      success: false,
+      error: err.message
+    });
+  }
+});
 
 app.get("/", (req, res) => {
   res.send("WhatsApp SaaS Backend Running");
