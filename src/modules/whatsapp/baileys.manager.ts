@@ -452,6 +452,7 @@ export const setMockConnection = (userId: string, mockSock: any) => {
 };
 
 export const handleIncomingMessages = async (userId: string, sock: any, m: any) => {
+  await loadBaileys();
   const msg = m.messages[0];
   if (!msg || msg.key.fromMe) return;
 
@@ -461,6 +462,7 @@ export const handleIncomingMessages = async (userId: string, sock: any, m: any) 
   console.log(`[Baileys Manager] Received message from ${jid}`);
 
   if (msg.message?.pollUpdateMessage) {
+    console.log(`[Baileys Manager] POLL_VOTE_RECEIVED: Received a poll vote webhook/event from ${jid}`);
     const pollUpdate = msg.message.pollUpdateMessage;
     const creationKey = pollUpdate.pollCreationMessageKey;
     if (!creationKey || !creationKey.id) return;
@@ -477,6 +479,8 @@ export const handleIncomingMessages = async (userId: string, sock: any, m: any) 
       console.log(`[Baileys Manager] Poll not found in database for message ID: ${incomingVoteId}`);
       return;
     }
+
+    console.log(`[Baileys Manager] POLL_RECORD_FOUND: WhatsappPoll record found successfully. messageId: ${dbPoll.messageId}, remoteJid: ${dbPoll.remoteJid}, orderId: ${dbPoll.orderId}`);
 
     try {
       const pollEncKey = Buffer.from(dbPoll.messageSecret, "base64");
@@ -509,44 +513,59 @@ export const handleIncomingMessages = async (userId: string, sock: any, m: any) 
           ? selectedHash 
           : Buffer.from(selectedHash as any).toString("hex");
         
+        let selectedIndex = -1;
         let selectedLabel = "";
-        for (const [label, hash] of Object.entries(optionsMap)) {
-          if (hash === selectedHashHex) {
-            selectedLabel = label;
+        const optionKeys = Object.keys(optionsMap);
+        const optionValues = Object.values(optionsMap);
+        
+        for (let i = 0; i < optionValues.length; i++) {
+          if (optionValues[i] === selectedHashHex) {
+            selectedIndex = i;
+            selectedLabel = optionKeys[i];
             break;
           }
         }
 
-        console.log(`[Baileys Manager] Match found for option hash ${selectedHashHex}: "${selectedLabel}"`);
+        console.log(`[Baileys Manager] Match found for option hash ${selectedHashHex}: "${selectedLabel}" at index ${selectedIndex}`);
         console.log(`Vote received:\nmessageId: ${incomingVoteId}\nselectedOption: ${selectedLabel}`);
 
-        if (selectedLabel) {
+        let resolvedStatus: "CONFIRMED" | "CANCELLED" | null = null;
+        if (selectedIndex === 0) {
+          resolvedStatus = "CONFIRMED";
+        } else if (selectedIndex === 1) {
+          resolvedStatus = "CANCELLED";
+        } else if (selectedLabel) {
           const cleanLabel = selectedLabel.toLowerCase();
-          let resolvedStatus: "CONFIRMED" | "CANCELLED" | null = null;
-
           if (cleanLabel.includes("confirm")) {
             resolvedStatus = "CONFIRMED";
           } else if (cleanLabel.includes("cancel")) {
             resolvedStatus = "CANCELLED";
           }
+        }
 
-          if (resolvedStatus) {
-            console.log(`[Baileys Manager] Voter resolved order ${dbPoll.orderId} status: ${resolvedStatus}`);
-            const order = await prisma.order.findUnique({
-              where: { id: dbPoll.orderId }
-            });
+        if (resolvedStatus) {
+          console.log(`[Baileys Manager] Voter resolved order ${dbPoll.orderId} status: ${resolvedStatus}`);
+          const order = await prisma.order.findUnique({
+            where: { id: dbPoll.orderId }
+          });
 
-            if (order && order.status === "PENDING") {
+          if (order) {
+            console.log(`[Baileys Manager] ORDER_FOUND: Order retrieved successfully. orderId: ${order.id}, customer: ${order.customer}, status: ${order.status}`);
+
+            if (order.status === "PENDING") {
               const updatedOrder = await updateOrderStatus(dbPoll.orderId, resolvedStatus);
+              console.log(`[Baileys Manager] ORDER_STATUS_UPDATED: Order status updated to ${resolvedStatus} for order ID ${dbPoll.orderId}`);
               console.log(`Order updated:\noldStatus: ${order.status}\nnewStatus: ${resolvedStatus}`);
               const orderLabel = updatedOrder.orderName || `#${updatedOrder.id.substring(0, 4)}`;
               console.log(`[Activity Log] Created entry: ${orderLabel} confirmed by ${updatedOrder.customer} (status: ${resolvedStatus})`);
             } else {
-              console.log(`[Baileys Manager] Order status is already ${order?.status || "UNKNOWN"}, not updating status.`);
+              console.log(`[Baileys Manager] Order status is already ${order.status}, not updating status.`);
             }
           } else {
-            console.log(`[Baileys Manager] Voter selected label "${selectedLabel}" did not match confirm/cancel patterns.`);
+            console.log(`[Baileys Manager] Order lookup FAILED for order ID: ${dbPoll.orderId}`);
           }
+        } else {
+          console.log(`[Baileys Manager] Voter selected option index/label did not match confirm/cancel patterns.`);
         }
       }
     } catch (err) {
