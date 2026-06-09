@@ -161,6 +161,16 @@ app.get("/db-debug", async (req, res) => {
       logs.push(`Failed to fetch tables list: ${err.message}`);
     }
 
+    // Migration history
+    let migrationsList: any[] = [];
+    try {
+      migrationsList = await prisma.$queryRawUnsafe(`
+        SELECT id, migration_name, finished_at::text as finished_at, logs FROM "_prisma_migrations";
+      `);
+    } catch (err: any) {
+      logs.push(`Failed to fetch migration history: ${err.message}`);
+    }
+
     // Row counts
     const counts: any = {};
     for (const t of tables) {
@@ -208,6 +218,7 @@ app.get("/db-debug", async (req, res) => {
       counts,
       users,
       orderStats,
+      migrationsList,
       logs
     });
 
