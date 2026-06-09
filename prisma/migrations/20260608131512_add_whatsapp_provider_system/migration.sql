@@ -39,7 +39,9 @@ DO $$
 BEGIN
     IF (SELECT data_type FROM information_schema.columns WHERE table_name = 'Order' AND column_name = 'status') = 'character varying' 
        OR (SELECT data_type FROM information_schema.columns WHERE table_name = 'Order' AND column_name = 'status') = 'text' THEN
+        ALTER TABLE "Order" ALTER COLUMN "status" DROP DEFAULT;
         ALTER TABLE "Order" ALTER COLUMN "status" TYPE "OrderStatus" USING "status"::"OrderStatus";
+        ALTER TABLE "Order" ALTER COLUMN "status" SET DEFAULT 'PENDING';
     END IF;
 END$$;
 

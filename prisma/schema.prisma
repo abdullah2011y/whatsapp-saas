@@ -99,15 +99,16 @@ model Template {
 }
 
 model Automation {
-  id          String    @id @default(uuid())
-  userId      String?
-  user        User?        @relation(fields: [userId], references: [id], onDelete: Cascade)
-  trigger     String    // e.g. "ORDER_CREATED", "ORDER_CONFIRMED", etc.
-  isEnabled   Boolean   @default(false)
-  templateId  String?
-  template    Template? @relation(fields: [templateId], references: [id], onDelete: SetNull)
-  createdAt   DateTime  @default(now())
-  updatedAt   DateTime  @updatedAt
+  id               String    @id @default(uuid())
+  userId           String?
+  user             User?        @relation(fields: [userId], references: [id], onDelete: Cascade)
+  trigger          String    // e.g. "ORDER_CREATED", "ORDER_CONFIRMED", etc.
+  isEnabled        Boolean   @default(false)
+  templateId       String?
+  template         Template? @relation(fields: [templateId], references: [id], onDelete: SetNull)
+  providerOverride String?   // "META", "WEB", or null/default
+  createdAt        DateTime  @default(now())
+  updatedAt        DateTime  @updatedAt
 
   @@unique([userId, trigger])
 }
@@ -131,6 +132,10 @@ model Settings {
   metaVerifyToken       String?
   metaConnected         Boolean  @default(false)
   shopifyDomain         String?
+
+  // Shopify Webhook Configuration
+  shopifyWebhookSecret  String?
+  shopifyWebhookStatus  String   @default("INACTIVE") // "ACTIVE", "INACTIVE"
   
   // Poll & Method Settings
   confirmationMethod     String   @default("BUTTONS") // "BUTTONS", "POLLS", "CUSTOM"
