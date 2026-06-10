@@ -82,6 +82,25 @@ export const triggerAutomation = async (triggerType: string, order: any) => {
       include: { template: true }
     });
 
+    let isTemplateUsed = false;
+    let templateName = "";
+    let templateId = "";
+    let templateContent = "";
+    let renderedBody = "";
+
+    if (config && config.isEnabled && config.templateId && config.template) {
+      isTemplateUsed = true;
+      templateName = config.template.name;
+      templateId = config.template.id;
+      templateContent = config.template.content;
+      renderedBody = renderTemplate(templateContent, order);
+
+      console.log(`[TEMPLATE_SELECTED] Name: ${templateName}`);
+      console.log(`[TEMPLATE_ID] ${templateId}`);
+      console.log(`[TEMPLATE_CONTENT_FROM_DB] ${templateContent}`);
+      console.log(`[TEMPLATE_RENDERED] ${renderedBody}`);
+    }
+
     // Resolve which provider to use based on connection states (Phase 6)
     const qrSession = await prisma.whatsappSession.findUnique({
       where: { userId }
@@ -114,28 +133,31 @@ export const triggerAutomation = async (triggerType: string, order: any) => {
       const cancelLabel = settings?.pollCancelLabel || "❌ No Cancelled";
 
       if (triggerType === "ORDER_CREATED") {
-        let textMsg = "";
-        if (config && config.isEnabled && config.templateId && config.template) {
-          textMsg = renderTemplate(config.template.content, order);
+        if (isTemplateUsed) {
+          console.log(`[Automation Trigger] Dispatching WhatsApp Web poll confirmation with template to ${order.phone}...`);
+          await sendBaileysPoll(userId, order.phone, renderedBody, [confirmLabel, cancelLabel], order.id);
+          console.log(`[FINAL_MESSAGE_SENT] Provider: WEB, Type: POLL, To: ${order.phone}, Content: ${renderedBody}`);
         } else {
-          textMsg = `🛍️ ByteForge Order Confirmation\n\n` +
+          const fallbackText = `🛍️ ByteForge Order Confirmation\n\n` +
             `Assalamualaikum ${order.customer} 👋\n\n` +
             `📦 Product: ${order.product}\n` +
             `💰 Amount: Rs ${order.amount}\n\n` +
             `Please confirm your order below 👇`;
+
+          console.log(`[Automation Trigger] Dispatching WhatsApp Web text confirmation to ${order.phone}...`);
+          await sendBaileysTextMessage(userId, order.phone, fallbackText);
+          console.log(`[FINAL_MESSAGE_SENT] Provider: WEB, Type: TEXT, To: ${order.phone}, Content: ${fallbackText}`);
+
+          console.log(`[Automation Trigger] Dispatching WhatsApp Web poll confirmation to ${order.phone}...`);
+          await sendBaileysPoll(userId, order.phone, "Confirm your order:", [confirmLabel, cancelLabel], order.id);
+          console.log(`[FINAL_MESSAGE_SENT] Provider: WEB, Type: POLL, To: ${order.phone}, Content: Confirm your order:`);
         }
-
-        console.log(`[Automation Trigger] Dispatching WhatsApp Web text confirmation to ${order.phone}...`);
-        await sendBaileysTextMessage(userId, order.phone, textMsg);
-
-        console.log(`[Automation Trigger] Dispatching WhatsApp Web poll confirmation to ${order.phone}...`);
-        await sendBaileysPoll(userId, order.phone, "Confirm your order:", [confirmLabel, cancelLabel], order.id);
       } else {
         // Other triggers: send plain text if configured
-        if (config && config.isEnabled && config.templateId && config.template) {
-          const renderedBody = renderTemplate(config.template.content, order);
+        if (isTemplateUsed) {
           console.log(`[Automation Trigger] Dispatching WhatsApp Web notification message to ${order.phone}...`);
           await sendBaileysTextMessage(userId, order.phone, renderedBody);
+          console.log(`[FINAL_MESSAGE_SENT] Provider: WEB, Type: TEXT, To: ${order.phone}, Content: ${renderedBody}`);
         } else {
           console.log(`[Automation Trigger] Trigger ${triggerType} is disabled or not configured, skipping.`);
         }
@@ -143,20 +165,26 @@ export const triggerAutomation = async (triggerType: string, order: any) => {
     } else {
       // META Cloud API
       if (triggerType === "ORDER_CREATED") {
-        if (config && config.isEnabled && config.templateId && config.template) {
-          const renderedBody = renderTemplate(config.template.content, order);
-          console.log(`[Automation Trigger] Dispatching Meta text confirmation to ${order.phone}...`);
-          await sendTextMessage(order.phone, renderedBody, userId);
+        if (isTemplateUsed) {
+          console.log(`[Automation Trigger] Dispatching Meta interactive confirmation to ${order.phone}...`);
+          await sendOrderMessage(order, renderedBody);
+          console.log(`[FINAL_MESSAGE_SENT] Provider: META, Type: INTERACTIVE, To: ${order.phone}, Content: ${renderedBody}`);
         } else {
           console.log(`[Automation Trigger] Fallback to Meta interactive button confirmation message`);
           await sendOrderMessage(order);
+          const fallbackText = `🛍️ ByteForge Order Confirmation\n\n` +
+            `Assalamualaikum ${order.customer} 👋\n\n` +
+            `📦 Product: ${order.product}\n` +
+            `💰 Amount: Rs ${order.amount}\n\n` +
+            `Please confirm your order below 👇`;
+          console.log(`[FINAL_MESSAGE_SENT] Provider: META, Type: INTERACTIVE, To: ${order.phone}, Content: ${fallbackText}`);
         }
       } else {
         // Other triggers
-        if (config && config.isEnabled && config.templateId && config.template) {
-          const renderedBody = renderTemplate(config.template.content, order);
+        if (isTemplateUsed) {
           console.log(`[Automation Trigger] Dispatching Meta text notification message to ${order.phone}...`);
           await sendTextMessage(order.phone, renderedBody, userId);
+          console.log(`[FINAL_MESSAGE_SENT] Provider: META, Type: TEXT, To: ${order.phone}, Content: ${renderedBody}`);
         } else {
           console.log(`[Automation Trigger] Trigger ${triggerType} is disabled or not configured, skipping.`);
         }

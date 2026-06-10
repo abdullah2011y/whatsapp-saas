@@ -18,7 +18,7 @@ const getMetaCredentials = async (userId: string) => {
   return { token, phoneNumberId };
 };
 
-export const sendOrderMessage = async (order: any) => {
+export const sendOrderMessage = async (order: any, bodyText?: string) => {
   try {
     const userId = order.userId || DEFAULT_USER_ID;
     const { token, phoneNumberId } = await getMetaCredentials(userId);
@@ -27,6 +27,14 @@ export const sendOrderMessage = async (order: any) => {
       console.error("[WhatsApp Service] Missing Meta credentials for user", userId);
       return;
     }
+
+    const textContent = bodyText || (
+      `🛍️ ByteForge Order Confirmation\n\n` +
+      `Assalamualaikum ${order.customer} 👋\n\n` +
+      `📦 Product: ${order.product}\n` +
+      `💰 Amount: Rs ${order.amount}\n\n` +
+      `Please confirm your order below 👇`
+    );
 
     await axios.post(
       `https://graph.facebook.com/v22.0/${phoneNumberId}/messages`,
@@ -39,12 +47,7 @@ export const sendOrderMessage = async (order: any) => {
           type: "button",
 
           body: {
-            text:
-              `🛍️ ByteForge Order Confirmation\n\n` +
-              `Assalamualaikum ${order.customer} 👋\n\n` +
-              `📦 Product: ${order.product}\n` +
-              `💰 Amount: Rs ${order.amount}\n\n` +
-              `Please confirm your order below 👇`,
+            text: textContent,
           },
 
           action: {
