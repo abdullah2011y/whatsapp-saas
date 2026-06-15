@@ -23,12 +23,13 @@ export const authMiddleware = (
     }
 
     const token = authHeader.split(" ")[1];
-    const decoded = jwt.verify(token, JWT_SECRET) as { id: string; email: string; role?: string };
+    const decoded = jwt.verify(token, JWT_SECRET) as any;
 
+    console.log(`[AUTH] JWT payload after verification: ${JSON.stringify(decoded)}`);
     console.log(`[AUTH] JWT role: ${decoded.role || "undefined"}`);
 
     req.user = {
-      id: decoded.id,
+      id: decoded.userId,
       email: decoded.email,
       role: decoded.role,
     };

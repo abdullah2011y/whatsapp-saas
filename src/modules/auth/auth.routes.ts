@@ -41,7 +41,9 @@ router.post("/signup", async (req, res) => {
       },
     });
 
-    const token = jwt.sign({ id: user.id, email: user.email, role: user.role }, JWT_SECRET, {
+    const payload = { userId: user.id, email: user.email, role: user.role, status: user.status };
+    console.log(`[AUTH] JWT payload before signing: ${JSON.stringify(payload)}`);
+    const token = jwt.sign(payload, JWT_SECRET, {
       expiresIn: "7d",
     });
     console.log(`[Auth] Token generated for new user: ${email}`);
@@ -120,7 +122,9 @@ router.post("/login", async (req, res) => {
       return res.status(401).json({ error: "Invalid credentials" });
     }
 
-    const token = jwt.sign({ id: user.id, email: user.email, role: user.role }, JWT_SECRET, {
+    const payload = { userId: user.id, email: user.email, role: user.role, status: user.status };
+    console.log(`[AUTH] JWT payload before signing: ${JSON.stringify(payload)}`);
+    const token = jwt.sign(payload, JWT_SECRET, {
       expiresIn: "7d",
     });
     console.log(`[Auth] Token generated for user: ${email}`);
@@ -158,10 +162,11 @@ router.get("/me", async (req, res) => {
 
     const token = authHeader.split(" ")[1];
     const decoded = jwt.verify(token, JWT_SECRET) as any;
+    console.log(`[AUTH] JWT payload after verification: ${JSON.stringify(decoded)}`);
     console.log(`[AUTH] JWT role: ${decoded.role}`);
 
     const user = await prisma.user.findUnique({
-      where: { id: decoded.id },
+      where: { id: decoded.userId },
       select: {
         id: true,
         name: true,
