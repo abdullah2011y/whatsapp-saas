@@ -228,7 +228,12 @@ export function Sidebar() {
         })}
       </div>
 
-      <div className="p-4 border-t border-border/40">
+      <div className="p-4 border-t border-border/40 space-y-2">
+        {!collapsed && (
+          <div className="text-[10px] text-muted-foreground text-center font-mono">
+            Current Role: {user?.role || "GUEST"}
+          </div>
+        )}
         <Button
           variant="ghost"
           size="icon"

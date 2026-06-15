@@ -111,14 +111,12 @@ export function Topnav() {
 
       <div className="flex items-center gap-4">
         <DropdownMenu>
-          <DropdownMenuTrigger asChild>
-            <Button variant="outline" size="icon" className="rounded-full border-border/40 hover:bg-accent/50 relative">
-              <Bell className="h-[1.2rem] w-[1.2rem] text-muted-foreground" />
-              {unreadCount > 0 && (
-                <span className="absolute top-2 right-2 h-2 w-2 rounded-full bg-primary shadow-[0_0_8px_rgba(0,240,255,0.8)] animate-pulse" />
-              )}
-              <span className="sr-only">Notifications</span>
-            </Button>
+          <DropdownMenuTrigger className="inline-flex items-center justify-center rounded-full border border-border/40 bg-background hover:bg-accent/50 relative size-8 text-muted-foreground transition-all focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50 outline-none select-none">
+            <Bell className="h-[1.2rem] w-[1.2rem]" />
+            {unreadCount > 0 && (
+              <span className="absolute top-2 right-2 h-2 w-2 rounded-full bg-primary shadow-[0_0_8px_rgba(0,240,255,0.8)] animate-pulse" />
+            )}
+            <span className="sr-only">Notifications</span>
           </DropdownMenuTrigger>
           <DropdownMenuContent className="w-80 glassmorphism border-border/40 max-h-96 overflow-y-auto" align="end">
             <div className="flex items-center justify-between px-4 py-2 border-b border-border/40">

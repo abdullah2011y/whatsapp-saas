@@ -47,8 +47,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           })
           if (res.ok) {
             const data = await res.json()
+            console.log("AUTH_ME_RESPONSE", data);
             setUser(data.user)
             setToken(storedToken)
+            console.log("CURRENT_USER", data.user);
+            console.log("CURRENT_ROLE", data.user?.role);
           } else {
             localStorage.removeItem("token")
           }
@@ -66,6 +69,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     localStorage.setItem("token", newToken)
     setToken(newToken)
     setUser(newUser)
+    console.log("CURRENT_USER", newUser);
+    console.log("CURRENT_ROLE", newUser?.role);
     router.push("/")
   }
 
