@@ -41,7 +41,7 @@ router.post("/signup", async (req, res) => {
       },
     });
 
-    const token = jwt.sign({ id: user.id, email: user.email }, JWT_SECRET, {
+    const token = jwt.sign({ id: user.id, email: user.email, role: user.role }, JWT_SECRET, {
       expiresIn: "7d",
     });
     console.log(`[Auth] Token generated for new user: ${email}`);
@@ -51,7 +51,16 @@ router.post("/signup", async (req, res) => {
     res.status(201).json({
       message: "User created successfully",
       token,
-      user: { id: user.id, name: user.name, email: user.email }
+      user: {
+        id: user.id,
+        name: user.name,
+        email: user.email,
+        role: user.role,
+        status: user.status,
+        plan: user.plan,
+        licenseKey: user.licenseKey,
+        expiresAt: user.expiresAt
+      }
     });
   } catch (error) {
     console.error("Signup error:", error);
@@ -79,6 +88,8 @@ router.post("/login", async (req, res) => {
       return res.status(401).json({ error: "Invalid credentials" });
     }
     console.log(`[Auth] User found for email: ${email}`);
+    console.log(`[AUTH] Database role: ${user.role}`);
+    console.log(`[AUTH] User status: ${user.status}`);
 
     if (user.status === "SUSPENDED") {
       console.log(`[Auth] Login failed: User ${email} is SUSPENDED`);
@@ -109,10 +120,11 @@ router.post("/login", async (req, res) => {
       return res.status(401).json({ error: "Invalid credentials" });
     }
 
-    const token = jwt.sign({ id: user.id, email: user.email }, JWT_SECRET, {
+    const token = jwt.sign({ id: user.id, email: user.email, role: user.role }, JWT_SECRET, {
       expiresIn: "7d",
     });
     console.log(`[Auth] Token generated for user: ${email}`);
+    console.log(`[AUTH] JWT role: ${user.role}`);
 
     await logAction(user.id, "USER_LOGIN", user.id, `User ${user.email} logged in successfully.`);
 
@@ -146,6 +158,7 @@ router.get("/me", async (req, res) => {
 
     const token = authHeader.split(" ")[1];
     const decoded = jwt.verify(token, JWT_SECRET) as any;
+    console.log(`[AUTH] JWT role: ${decoded.role}`);
 
     const user = await prisma.user.findUnique({
       where: { id: decoded.id },
@@ -165,6 +178,9 @@ router.get("/me", async (req, res) => {
     if (!user) {
       return res.status(404).json({ error: "User not found" });
     }
+
+    console.log(`[AUTH] /auth/me role: ${user.role}`);
+    console.log(`[AUTH] User status: ${user.status}`);
 
     if (user.status === "SUSPENDED") {
       return res.status(403).json({ error: "Your account is suspended." });
