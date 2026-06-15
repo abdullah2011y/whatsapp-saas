@@ -67,7 +67,23 @@ export const triggerAutomation = async (triggerType: string, order: any) => {
   try {
     const userId = order.userId || DEFAULT_USER_ID;
     console.log(`[Automation Trigger] Firing event "${triggerType}" for order ${order.orderName || order.id} under user ${userId}`);
-    
+
+    // Verify user subscription status
+    const user = await prisma.user.findUnique({
+      where: { id: userId },
+      select: { role: true, plan: true, expiresAt: true, status: true }
+    });
+
+    if (user) {
+      const isExpired = user.role !== "SUPERADMIN" && 
+                        user.plan !== "Lifetime" && 
+                        (user.status === "INACTIVE" || user.status === "ARCHIVED" || (user.expiresAt && new Date(user.expiresAt) < new Date()));
+      if (isExpired) {
+        console.log(`[Automation Trigger] Execution skipped: User ${user.role} (ID: ${userId}) subscription is expired or inactive.`);
+        return;
+      }
+    }
+
     const settings = await prisma.settings.findUnique({
       where: { userId }
     });
@@ -139,10 +155,10 @@ export const triggerAutomation = async (triggerType: string, order: any) => {
           console.log(`[FINAL_MESSAGE_SENT] Provider: WEB, Type: POLL, To: ${order.phone}, Content: ${renderedBody}`);
         } else {
           const fallbackText = `🛍️ ByteForge Order Confirmation\n\n` +
-            `Assalamualaikum ${order.customer} 👋\n\n` +
-            `📦 Product: ${order.product}\n` +
-            `💰 Amount: Rs ${order.amount}\n\n` +
-            `Please confirm your order below 👇`;
+            `Assalam O Alikum  ${order.customer} 👋\n\n` +
+            `Apne Byteforge.pk Sy : ${order.product} Order Kia Ha\n` +
+            `Jiske Amount Hai: PKR ${order.amount}\n\n` +
+            `Kindly Order Confirm Krden Taky Hum Further Process Kr Sken`;
 
           console.log(`[Automation Trigger] Dispatching WhatsApp Web text confirmation to ${order.phone}...`);
           await sendBaileysTextMessage(userId, order.phone, fallbackText);

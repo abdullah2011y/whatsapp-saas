@@ -9,6 +9,7 @@ import Link from "next/link"
 const AUTH_ROUTES = ["/login", "/signup", "/forgot-password"]
 
 import { BrandLogo } from "@/shared/components/BrandLogo"
+import { SubscriptionBanner } from "@/shared/components/SubscriptionBanner"
 
 export function MobileLayout({ children }: { children: React.ReactNode }) {
   const pathname = usePathname()
@@ -54,7 +55,8 @@ export function MobileLayout({ children }: { children: React.ReactNode }) {
       </header>
 
       {/* Main scrollable area */}
-      <main className="flex-1 overflow-y-auto overflow-x-hidden relative z-10 pb-20">
+      <main className="flex-1 overflow-y-auto overflow-x-hidden relative z-10 pb-20 p-4">
+        <SubscriptionBanner />
         <AnimatePresence mode="wait">
           <motion.div
             key={pathname}

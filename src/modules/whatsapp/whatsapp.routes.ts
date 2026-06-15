@@ -125,8 +125,11 @@ router.post("/debug-send", async (req: any, res: Response) => {
   }
 });
 
+import { licenseMiddleware } from "../../shared/middlewares/license.middleware";
+
 // Apply auth middleware to all routes below in this router
 router.use(authMiddleware as any);
+router.use(licenseMiddleware as any);
 
 // GET /whatsapp/overview
 router.get("/overview", async (req: AuthenticatedRequest, res: Response) => {

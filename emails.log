@@ -1,0 +1,9 @@
+[2026-06-15T22:28:36.880Z] TO: test_sub_monitor@example.com | FROM: no-reply@byteforge.pk | SUBJECT: Action Required: Subscription Expiring in 7 Days
+TEXT: Your subscription will expire in 7 days. Renew now to avoid service interruption.
+--------------------------------------------------
+[2026-06-15T22:28:36.899Z] TO: test_sub_monitor@example.com | FROM: no-reply@byteforge.pk | SUBJECT: Subscription Expired
+TEXT: Subscription expired. Renew to restore premium features.
+--------------------------------------------------
+[2026-06-15T22:28:36.912Z] TO: test_sub_monitor@example.com | FROM: no-reply@byteforge.pk | SUBJECT: Account Inactive - Subscription Expired
+TEXT: Your subscription grace period has ended. Your account is now inactive. All data remains preserved indefinitely, but premium automations, messages, and pages are locked. Renew your subscription to reactivate.
+--------------------------------------------------

@@ -6,6 +6,7 @@ import { usePathname } from "next/navigation"
 
 import { Sidebar } from "../components/Sidebar"
 import { Topnav } from "../components/Topnav"
+import { SubscriptionBanner } from "@/shared/components/SubscriptionBanner"
 
 const AUTH_ROUTES = ["/login", "/signup", "/forgot-password"]
 
@@ -46,6 +47,7 @@ export function DesktopLayout({ children }: { children: React.ReactNode }) {
         <Topnav />
 
         <div className="flex-1 overflow-y-auto overflow-x-hidden p-6 custom-scrollbar">
+          <SubscriptionBanner />
           <AnimatePresence mode="wait">
             <motion.div
               key={pathname}

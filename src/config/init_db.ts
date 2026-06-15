@@ -2,6 +2,63 @@ import { exec } from "child_process";
 import { runDataMigration } from "../migrate_users_startup";
 import { initializeAllSessions } from "../modules/whatsapp/baileys.manager";
 import prisma from "./database";
+import bcrypt from "bcryptjs";
+import { logAction } from "../shared/services/audit.service";
+import { runSubscriptionMonitorCheck } from "../modules/admin/subscription-monitor.service";
+
+async function seedSuperAdmin() {
+  const email = process.env.SUPER_ADMIN_EMAIL || "abdullahglid@gmail.com";
+  const password = process.env.SUPER_ADMIN_PASSWORD || "abdullah@2011y";
+  console.log(`[Startup] Seeding Super Admin check for: ${email}`);
+
+  try {
+    const existing = await prisma.user.findUnique({
+      where: { email: email.trim().toLowerCase() }
+    });
+
+    console.log(`[Startup] Whether the Super Admin record already existed before seeding: ${!!existing}`);
+
+    const hashedPassword = await bcrypt.hash(password, 10);
+
+    if (!existing) {
+      const superAdmin = await prisma.user.create({
+        data: {
+          name: "Super Admin",
+          email: email.trim().toLowerCase(),
+          password: hashedPassword,
+          role: "SUPERADMIN",
+          status: "ACTIVE",
+          plan: "Lifetime"
+        }
+      });
+      console.log(`[Startup] Super Admin account created successfully with ID: ${superAdmin.id}`);
+      await logAction(superAdmin.id, "SEED_SUPER_ADMIN", superAdmin.id, `Super Admin account initialized with email: ${email}`);
+    } else {
+      // If the Super Admin already exists, update its password hash to match: Password: abdullah@2011y
+      await prisma.user.update({
+        where: { id: existing.id },
+        data: { 
+          password: hashedPassword,
+          role: "SUPERADMIN", 
+          plan: "Lifetime" 
+        }
+      });
+      console.log(`[Startup] Existing user role and password hash updated to SUPERADMIN for ${email}`);
+      await logAction(existing.id, "UPDATE_TO_SUPER_ADMIN", existing.id, `Existing user role and password updated for ${email}`);
+    }
+  } catch (error) {
+    console.error("[Startup] Error seeding Super Admin:", error);
+  }
+}
+
+async function runAutoArchivingCheck() {
+  console.log("[Startup] Triggering subscription monitor check...");
+  try {
+    await runSubscriptionMonitorCheck();
+  } catch (error) {
+    console.error("[Startup] Error running subscription monitor check:", error);
+  }
+}
 
 export async function initializeDatabase() {
   console.log("[Startup] Running database migrations...");
@@ -26,6 +83,12 @@ export async function initializeDatabase() {
     
     // Run the user data recovery
     await runDataMigration();
+
+    // Run the super admin seed
+    await seedSuperAdmin();
+
+    // Run the auto-archiving check
+    await runAutoArchivingCheck();
 
     console.log("[Startup] Data migration finished. Restoring active Baileys sessions...");
     

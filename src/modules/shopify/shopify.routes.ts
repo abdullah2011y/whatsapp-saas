@@ -13,8 +13,11 @@ const router = Router();
 // Public Shopify webhook endpoint (Shopify sends events here)
 router.post("/webhook", webhookHandler);
 
+import { licenseMiddleware } from "../../shared/middlewares/license.middleware";
+
 // Protected tenant configurations
 router.use(authMiddleware as any);
+router.use(licenseMiddleware as any);
 router.get("/settings", getShopifySettingsHandler);
 router.post("/settings", saveShopifySettingsHandler);
 router.post("/webhook/generate-secret", generateSecretHandler);

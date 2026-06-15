@@ -9,8 +9,11 @@ import {
 
 const router = Router();
 
+import { licenseMiddleware } from "../../shared/middlewares/license.middleware";
+
 // Protect all template routes
 router.use(authMiddleware as any);
+router.use(licenseMiddleware as any);
 
 router.get("/", async (req: AuthenticatedRequest, res: Response) => {
   try {

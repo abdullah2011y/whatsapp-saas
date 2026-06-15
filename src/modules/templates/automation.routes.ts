@@ -4,8 +4,11 @@ import { getAutomations, updateAutomation } from "./automation.service";
 
 const router = Router();
 
+import { licenseMiddleware } from "../../shared/middlewares/license.middleware";
+
 // Protect all automation routes
 router.use(authMiddleware as any);
+router.use(licenseMiddleware as any);
 
 router.get("/", async (req: AuthenticatedRequest, res: Response) => {
   try {

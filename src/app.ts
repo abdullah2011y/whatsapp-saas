@@ -12,6 +12,9 @@ import analyticsRoutes from "./modules/dashboard/analytics.routes";
 import activityRoutes from "./modules/dashboard/activity.routes";
 import templateRoutes from "./modules/templates/template.routes";
 import automationRoutes from "./modules/templates/automation.routes";
+import adminRoutes from "./modules/admin/admin.routes";
+import notificationRoutes from "./modules/notifications/notification.routes";
+import { startSubscriptionScheduler } from "./modules/admin/subscription-monitor.service";
 
 const app = express();
 
@@ -52,6 +55,12 @@ app.use("/activity", activityRoutes);
 app.use("/templates", templateRoutes);
 app.use("/automations", automationRoutes);
 
+// Admin Routes
+app.use("/admin", adminRoutes);
+
+// Notifications Routes
+app.use("/notifications", notificationRoutes);
+
 // Webhook Routes
 app.get("/webhook", webhookGet);
 app.post("/webhook", webhookPost);
@@ -72,5 +81,6 @@ app.listen(PORT, () => {
   initializeDatabase().catch((err) => {
     console.error("[Startup] Failed to initialize database and sessions:", err);
   });
+  startSubscriptionScheduler();
 });
 // Dashboard routes: /dashboard/stats, /dashboard/analytics, /dashboard/customers

@@ -5,13 +5,24 @@ import * as React from "react"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/shared/components/ui/card"
 import { Overview } from "@/shared/components/dashboard/overview"
 import { RecentActivity } from "@/shared/components/dashboard/recent-activity"
-import { DollarSign, ShoppingCart, CheckCircle2, XCircle, TrendingUp, Activity, Loader2 } from "lucide-react"
+import { DollarSign, ShoppingCart, CheckCircle2, XCircle, TrendingUp, Activity, Loader2, Clock, Lock, Shield, Sparkles } from "lucide-react"
+import { useAuth } from "@/shared/lib/auth"
 
 export default function DashboardPage() {
+  const { user } = useAuth()
   const [stats, setStats] = React.useState<any>(null)
   const [chartData, setChartData] = React.useState<any[]>([])
   const [activities, setActivities] = React.useState<any[]>([])
   const [loading, setLoading] = React.useState(true)
+
+  const isLicensed = React.useMemo(() => {
+    if (!user) return false
+    if (user.role === "SUPERADMIN") return true
+    if (user.status === "ARCHIVED") return false
+    if (user.plan === "Lifetime") return true
+    if (!user.expiresAt) return false
+    return new Date(user.expiresAt) > new Date()
+  }, [user])
 
   const fetchDashboardData = async () => {
     try {
@@ -105,6 +116,49 @@ export default function DashboardPage() {
         </div>
       ) : (
         <>
+          {/* Subscription Status Widget */}
+          {user && (
+            <div className="mb-6">
+              {user.role === "SUPERADMIN" ? (
+                <div className="p-4 rounded-xl bg-purple-500/10 border border-purple-500/20 text-purple-400 text-sm flex items-center gap-3">
+                  <Shield className="w-5 h-5 text-purple-400 animate-pulse" />
+                  <div>
+                    <span className="font-bold text-white">Super Admin Control Center</span>
+                    <p className="text-xs text-muted-foreground">You have unrestricted access to all modules and configurations across the SaaS tenant registry.</p>
+                  </div>
+                </div>
+              ) : user.status === "ARCHIVED" ? (
+                <div className="p-4 rounded-xl bg-amber-500/10 border border-amber-500/20 text-amber-400 text-sm flex items-center gap-3 shadow-[0_0_15px_rgba(245,158,11,0.08)]">
+                  <Clock className="w-5 h-5 text-amber-400 animate-bounce" />
+                  <div>
+                    <span className="font-bold text-white">Account Status: ARCHIVED</span>
+                    <p className="text-xs text-muted-foreground">Your premium subscription expired over 30 days ago. Features are locked, but your database records are preserved. Contact support to restore access.</p>
+                  </div>
+                </div>
+              ) : !isLicensed || user.status === "INACTIVE" ? (
+                <div className="p-4 rounded-xl bg-rose-500/10 border border-rose-500/20 text-rose-400 text-sm flex items-center gap-3">
+                  <Lock className="w-5 h-5 text-rose-400" />
+                  <div>
+                    <span className="font-bold text-white">Subscription expired.</span>
+                    <p className="text-xs text-muted-foreground">Renew to restore premium features.</p>
+                  </div>
+                </div>
+              ) : (
+                <div className="p-4 rounded-xl bg-cyan-500/5 border border-cyan-500/20 text-cyan-400 text-sm flex items-center justify-between">
+                  <div className="flex items-center gap-3">
+                    <Sparkles className="w-5 h-5 text-cyan-400 animate-pulse" />
+                    <div>
+                      <span className="font-bold text-white">Premium License Active — {user.plan} Plan</span>
+                      <p className="text-xs text-muted-foreground">
+                        License: <span className="font-mono text-cyan-300 font-semibold">{user.licenseKey}</span> • Expiry: {user.expiresAt ? new Date(user.expiresAt).toLocaleDateString() : "Never"}
+                      </p>
+                    </div>
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
+
           <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
             {statCards.map((stat, i) => (
               <Card key={i} className="bg-background/50 backdrop-blur-sm border-border/50 shadow-sm hover:shadow-[0_0_15px_rgba(0,240,255,0.15)] transition-all duration-300">

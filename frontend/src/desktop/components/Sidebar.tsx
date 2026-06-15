@@ -15,12 +15,14 @@ import {
   ChevronDown,
   ChevronUp,
   Lock,
+  Shield,
   LucideIcon
 } from "lucide-react"
 import { cn } from "@/shared/lib/utils"
 import { Button } from "@/shared/components/ui/button"
 import { WHATSAPP_MODULE_ENABLED } from "@/shared/config/features"
 import { BrandLogo } from "@/shared/components/BrandLogo"
+import { useAuth } from "@/shared/lib/auth"
 
 interface SidebarSubItem {
   name: string
@@ -59,6 +61,7 @@ const navigation: SidebarNavigationItem[] = [
 
 export function Sidebar() {
   const pathname = usePathname()
+  const { user } = useAuth()
   const [collapsed, setCollapsed] = React.useState(false)
   const [whatsappOpen, setWhatsappOpen] = React.useState(true)
 
@@ -69,8 +72,17 @@ export function Sidebar() {
     }
   }, [pathname])
 
+  const isLicensed = React.useMemo(() => {
+    if (!user) return false
+    if (user.role === "SUPERADMIN") return true
+    if (user.status === "ARCHIVED") return false
+    if (user.plan === "Lifetime") return true
+    if (!user.expiresAt) return false
+    return new Date(user.expiresAt) > new Date()
+  }, [user])
+
   const navItems = React.useMemo(() => {
-    return navigation.map(item => {
+    const items = navigation.map(item => {
       if (item.name === 'WhatsApp' && !WHATSAPP_MODULE_ENABLED) {
         return {
           ...item,
@@ -82,7 +94,17 @@ export function Sidebar() {
       }
       return item
     })
-  }, [])
+
+    if (user?.role === "SUPERADMIN") {
+      items.push({
+        name: "Admin Portal",
+        href: "/admin",
+        icon: Shield
+      })
+    }
+
+    return items
+  }, [user])
 
   return (
     <div
@@ -134,6 +156,9 @@ export function Sidebar() {
                       isParentActive ? "text-primary drop-shadow-[0_0_8px_rgba(0,240,255,0.8)]" : ""
                     )} />
                     <span className="font-medium truncate">{item.name}</span>
+                    {!isLicensed && (
+                      <Lock className="w-3 h-3 text-muted-foreground/50 ml-1.5 shadow-[0_0_8px_rgba(0,240,255,0.1)]" />
+                    )}
                   </div>
                   {whatsappOpen ? <ChevronUp className="w-4 h-4 text-muted-foreground" /> : <ChevronDown className="w-4 h-4 text-muted-foreground" />}
                 </button>
@@ -171,6 +196,7 @@ export function Sidebar() {
             )
           }
 
+          const isLocked = !isLicensed && ["WhatsApp", "Analytics", "Settings"].includes(item.name.replace(" (Soon)", ""));
           return (
             <Link key={item.name} href={item.href}>
               <div
@@ -192,6 +218,9 @@ export function Sidebar() {
                 )} />
                 {!collapsed && (
                   <span className="font-medium truncate">{item.name}</span>
+                )}
+                {isLocked && !collapsed && (
+                  <Lock className="w-3.5 h-3.5 ml-auto text-muted-foreground/50" />
                 )}
               </div>
             </Link>

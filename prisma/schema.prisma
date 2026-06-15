@@ -40,6 +40,12 @@ model User {
   name             String
   email            String            @unique
   password         String
+  role             String            @default("USER")
+  status           String            @default("ACTIVE") // ACTIVE, SUSPENDED, ARCHIVED
+  company          String?
+  plan             String            @default("Free")
+  licenseKey       String?
+  expiresAt        DateTime?
   createdAt        DateTime          @default(now())
   settings         Settings?
   whatsappSession  WhatsappSession?
@@ -47,6 +53,9 @@ model User {
   automations      Automation[]
   orders           Order[]
   whatsappPolls    WhatsappPoll[]
+  licenseKeys      LicenseKey[]
+  auditLogs        AuditLog[]
+  notifications    Notification[]
 }
 
 model Order {
@@ -172,4 +181,36 @@ model WhatsappPoll {
   provider      String   @default("WEB")
   phoneNumber   String?
   createdAt     DateTime @default(now())
+}
+
+model LicenseKey {
+  id           String    @id @default(uuid())
+  key          String    @unique
+  duration     String    // 1 Month, 3 Months, 6 Months, 12 Months, Lifetime
+  status       String    @default("ACTIVE") // ACTIVE, DEACTIVATED, EXPIRED, UNUSED
+  createdAt    DateTime  @default(now())
+  activatedAt  DateTime?
+  expiresAt    DateTime?
+  userId       String?
+  user         User?     @relation(fields: [userId], references: [id], onDelete: SetNull)
+}
+
+model AuditLog {
+  id        String   @id @default(uuid())
+  userId    String?
+  user      User?    @relation(fields: [userId], references: [id], onDelete: SetNull)
+  action    String
+  targetId  String?
+  details   String?
+  createdAt DateTime @default(now())
+}
+
+model Notification {
+  id        String   @id @default(uuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  message   String
+  type      String   @default("INFO") // INFO, WARNING, EXPIRE_WARNING, CRITICAL
+  read      Boolean  @default(false)
+  createdAt DateTime @default(now())
 }

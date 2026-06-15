@@ -2,8 +2,11 @@ import { Router, Response } from "express";
 import { getAnalyticsOverview, getTopProducts, getCustomerAnalytics } from "./analytics.service";
 import { authMiddleware, AuthenticatedRequest } from "../auth/auth.middleware";
 
+import { licenseMiddleware } from "../../shared/middlewares/license.middleware";
+
 const router = Router();
 router.use(authMiddleware as any);
+router.use(licenseMiddleware as any);
 
 router.get("/", async (req: AuthenticatedRequest, res: Response) => {
   try {

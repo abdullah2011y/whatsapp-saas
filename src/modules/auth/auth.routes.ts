@@ -2,6 +2,7 @@ import { Router } from "express";
 import { PrismaClient } from "@prisma/client";
 import bcrypt from "bcryptjs";
 import jwt from "jsonwebtoken";
+import { logAction } from "../../shared/services/audit.service";
 
 const router = Router();
 const prisma = new PrismaClient();
@@ -10,7 +11,7 @@ const JWT_SECRET = process.env.JWT_SECRET || "fallback_secret";
 // POST /auth/signup
 router.post("/signup", async (req, res) => {
   try {
-    let { name, email, password } = req.body;
+    let { name, email, password, company } = req.body;
     
     if (email) email = email.trim().toLowerCase();
 
@@ -33,6 +34,10 @@ router.post("/signup", async (req, res) => {
         name,
         email,
         password: hashedPassword,
+        company: company || null,
+        role: "USER",
+        status: "ACTIVE",
+        plan: "Free"
       },
     });
 
@@ -40,6 +45,8 @@ router.post("/signup", async (req, res) => {
       expiresIn: "7d",
     });
     console.log(`[Auth] Token generated for new user: ${email}`);
+
+    await logAction(user.id, "USER_SIGNUP", user.id, `User ${user.email} signed up successfully.`);
 
     res.status(201).json({
       message: "User created successfully",
@@ -73,7 +80,16 @@ router.post("/login", async (req, res) => {
     }
     console.log(`[Auth] User found for email: ${email}`);
 
+    if (user.status === "SUSPENDED") {
+      console.log(`[Auth] Login failed: User ${email} is SUSPENDED`);
+      return res.status(403).json({ error: "Your account has been suspended. Please contact support." });
+    }
+
+    const storedHashLength = user.password ? user.password.length : 0;
+    console.log(`[Auth] Stored hash length for ${email}: ${storedHashLength}`);
+
     let isMatch = await bcrypt.compare(password, user.password);
+    console.log(`[Auth] bcrypt.compare result for ${email}: ${isMatch}`);
     
     // Fallback for existing plain text passwords (pre-bcrypt)
     if (!isMatch && user.password === password) {
@@ -98,10 +114,21 @@ router.post("/login", async (req, res) => {
     });
     console.log(`[Auth] Token generated for user: ${email}`);
 
+    await logAction(user.id, "USER_LOGIN", user.id, `User ${user.email} logged in successfully.`);
+
     res.json({
       message: "Login successful",
       token,
-      user: { id: user.id, name: user.name, email: user.email }
+      user: {
+        id: user.id,
+        name: user.name,
+        email: user.email,
+        role: user.role,
+        status: user.status,
+        plan: user.plan,
+        licenseKey: user.licenseKey,
+        expiresAt: user.expiresAt
+      }
     });
   } catch (error) {
     console.error("Login error:", error);
@@ -122,11 +149,25 @@ router.get("/me", async (req, res) => {
 
     const user = await prisma.user.findUnique({
       where: { id: decoded.id },
-      select: { id: true, name: true, email: true, createdAt: true }
+      select: {
+        id: true,
+        name: true,
+        email: true,
+        role: true,
+        status: true,
+        plan: true,
+        licenseKey: true,
+        expiresAt: true,
+        createdAt: true
+      }
     });
 
     if (!user) {
       return res.status(404).json({ error: "User not found" });
+    }
+
+    if (user.status === "SUSPENDED") {
+      return res.status(403).json({ error: "Your account is suspended." });
     }
 
     res.json({ user });
