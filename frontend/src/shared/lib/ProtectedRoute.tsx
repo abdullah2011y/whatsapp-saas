@@ -1,7 +1,7 @@
 "use client"
 
 import { useEffect } from "react"
-import { useRouter } from "next/navigation"
+import { useRouter, usePathname } from "next/navigation"
 import { BrandLogo } from "../components/BrandLogo"
 import { motion } from "framer-motion"
 import { useAuth } from "./auth"
@@ -9,12 +9,28 @@ import { useAuth } from "./auth"
 export function ProtectedRoute({ children }: { children: React.ReactNode }) {
   const { user, isLoading } = useAuth()
   const router = useRouter()
+  const pathname = usePathname()
 
   useEffect(() => {
-    if (!isLoading && !user) {
-      router.replace("/login")
+    if (!isLoading) {
+      if (!user) {
+        router.replace("/login")
+      } else {
+        // Strict Role-Based Route Guarding
+        if (user.role === "SUPERADMIN") {
+          // Super Admins must stay inside /admin path
+          if (pathname !== "/admin") {
+            router.replace("/admin")
+          }
+        } else {
+          // Regular users must not access /admin
+          if (pathname === "/admin") {
+            router.replace("/")
+          }
+        }
+      }
     }
-  }, [user, isLoading, router])
+  }, [user, isLoading, pathname, router])
 
   if (isLoading) {
     return (

@@ -1,7 +1,7 @@
 "use client"
 
 import * as React from "react"
-import { usePathname } from "next/navigation"
+import { usePathname, useSearchParams } from "next/navigation"
 import { Bell, Search, LogOut, User, Settings } from "lucide-react"
 
 import { ThemeToggle } from "@/shared/components/theme-toggle"
@@ -22,6 +22,7 @@ import { apiFetch } from "@/shared/lib/api/client"
 
 export function Topnav() {
   const pathname = usePathname()
+  const searchParams = useSearchParams()
   const { user, logout } = useAuth()
   const [notifications, setNotifications] = React.useState<any[]>([])
 
@@ -85,6 +86,21 @@ export function Topnav() {
   }
 
   const getTitle = () => {
+    if (user?.role === "SUPERADMIN") {
+      const tab = searchParams.get("tab") || "overview"
+      switch (tab) {
+        case "overview": return "Global Dashboard"
+        case "users": return "Users Registry"
+        case "plans": return "SaaS Plans"
+        case "licenses": return "Licenses"
+        case "revenue": return "Revenue Center"
+        case "health": return "System Health"
+        case "backups": return "Backup & Recovery"
+        case "logs": return "Audit Logs"
+        case "notifications": return "Notifications"
+        default: return "Super Admin Portal"
+      }
+    }
     if (pathname === "/") return "Dashboard"
     const path = pathname.split("/")[1]
     return path.charAt(0).toUpperCase() + path.slice(1)
@@ -99,14 +115,16 @@ export function Topnav() {
       <div className="flex flex-1 items-center gap-4">
         <h1 className="text-xl font-bold tracking-tight">{getTitle()}</h1>
 
-        <div className="hidden md:flex relative ml-8 max-w-md flex-1 items-center">
-          <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
-          <Input
-            type="search"
-            placeholder="Search orders, customers..."
-            className="w-full rounded-full bg-accent/30 pl-9 border-border/40 focus-visible:ring-primary/50 transition-all"
-          />
-        </div>
+        {user?.role !== "SUPERADMIN" && (
+          <div className="hidden md:flex relative ml-8 max-w-md flex-1 items-center">
+            <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
+            <Input
+              type="search"
+              placeholder="Search orders, customers..."
+              className="w-full rounded-full bg-accent/30 pl-9 border-border/40 focus-visible:ring-primary/50 transition-all"
+            />
+          </div>
+        )}
       </div>
 
       <div className="flex items-center gap-4">
@@ -182,9 +200,11 @@ export function Topnav() {
               <DropdownMenuItem className="gap-2 cursor-pointer">
                 <User className="w-4 h-4" /> Profile
               </DropdownMenuItem>
-              <DropdownMenuItem className="gap-2 cursor-pointer">
-                <Settings className="w-4 h-4" /> Settings
-              </DropdownMenuItem>
+              {user?.role !== "SUPERADMIN" && (
+                <DropdownMenuItem className="gap-2 cursor-pointer">
+                  <Settings className="w-4 h-4" /> Settings
+                </DropdownMenuItem>
+              )}
               <DropdownMenuSeparator className="bg-border/40" />
               <DropdownMenuItem
                 className="gap-2 text-red-400 focus:bg-red-500/10 focus:text-red-400 cursor-pointer"

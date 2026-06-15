@@ -41,10 +41,14 @@ export function DesktopLayout({ children }: { children: React.ReactNode }) {
         <div className="absolute bottom-[-10%] right-[-10%] w-[40%] h-[40%] rounded-full bg-primary/5 blur-[120px]" />
       </div>
 
-      <Sidebar />
+      <React.Suspense fallback={<div className="w-[240px] bg-background border-r border-border/40" />}>
+        <Sidebar />
+      </React.Suspense>
 
       <main className="flex-1 flex flex-col min-w-0 relative z-10 h-screen overflow-hidden">
-        <Topnav />
+        <React.Suspense fallback={<div className="h-16 bg-background border-b border-border/40" />}>
+          <Topnav />
+        </React.Suspense>
 
         <div className="flex-1 overflow-y-auto overflow-x-hidden p-6 custom-scrollbar">
           <SubscriptionBanner />

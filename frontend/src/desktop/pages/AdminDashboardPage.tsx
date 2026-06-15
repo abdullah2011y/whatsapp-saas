@@ -27,7 +27,8 @@ import {
   Database,
   Sliders,
   Download,
-  AlertTriangle
+  AlertTriangle,
+  Bell
 } from "lucide-react"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/shared/components/ui/card"
 import { Button } from "@/shared/components/ui/button"
@@ -36,10 +37,18 @@ import { Badge } from "@/shared/components/ui/badge"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/shared/components/ui/table"
 import { apiFetch } from "@/shared/lib/api/client"
 import { useAuth } from "@/shared/lib/auth"
+import { useSearchParams, useRouter } from "next/navigation"
 
 export default function AdminDashboardPage() {
   const { impersonate } = useAuth()
-  const [activeTab, setActiveTab] = React.useState<"overview" | "users" | "plans" | "licenses" | "health" | "backups" | "logs">("overview")
+  const router = useRouter()
+  const searchParams = useSearchParams()
+  const activeTab = (searchParams.get("tab") || "overview") as "overview" | "users" | "plans" | "licenses" | "revenue" | "health" | "backups" | "logs" | "notifications"
+  
+  const setActiveTab = (tab: string) => {
+    router.push(`/admin?tab=${tab}`)
+  }
+
   const [stats, setStats] = React.useState<any>(null)
   const [users, setUsers] = React.useState<any[]>([])
   const [plans, setPlans] = React.useState<any[]>([])
@@ -47,6 +56,8 @@ export default function AdminDashboardPage() {
   const [health, setHealth] = React.useState<any>(null)
   const [backups, setBackups] = React.useState<any[]>([])
   const [logs, setLogs] = React.useState<any[]>([])
+  const [notifications, setNotifications] = React.useState<any[]>([])
+  const [activities, setActivities] = React.useState<any[]>([])
   
   const [loading, setLoading] = React.useState(true)
   const [searchQuery, setSearchQuery] = React.useState("")
@@ -190,6 +201,30 @@ export default function AdminDashboardPage() {
     }
   }
 
+  const fetchNotifications = async () => {
+    try {
+      const res = await apiFetch("/notifications")
+      if (res.ok) {
+        const data = await res.json()
+        setNotifications(data)
+      }
+    } catch (err) {
+      console.error("Failed to fetch admin notifications:", err)
+    }
+  }
+
+  const fetchActivities = async () => {
+    try {
+      const res = await apiFetch("/activity")
+      if (res.ok) {
+        const data = await res.json()
+        setActivities(data)
+      }
+    } catch (err) {
+      console.error("Failed to fetch admin activities:", err)
+    }
+  }
+
   const loadData = async () => {
     setLoading(true)
     await Promise.all([
@@ -200,7 +235,9 @@ export default function AdminDashboardPage() {
       fetchHealth(),
       fetchBackups(),
       fetchSysConfig(),
-      fetchLogs()
+      fetchLogs(),
+      fetchNotifications(),
+      fetchActivities()
     ])
     setLoading(false)
   }
@@ -603,13 +640,15 @@ export default function AdminDashboardPage() {
       {/* Navigation tabs */}
       <div className="flex flex-wrap border-b border-border/30 gap-1 sm:gap-2">
         {[
-          { id: "overview", label: "Overview", icon: LayoutDashboard },
+          { id: "overview", label: "Global Dashboard", icon: LayoutDashboard },
           { id: "users", label: "Users Registry", icon: Users },
           { id: "plans", label: "SaaS Plans", icon: Sliders },
           { id: "licenses", label: "Licenses", icon: Key },
+          { id: "revenue", label: "Revenue Center", icon: Coins },
           { id: "health", label: "System Health", icon: Activity },
           { id: "backups", label: "Backup & Recovery", icon: Database },
-          { id: "logs", label: "Audit Logs", icon: FileText }
+          { id: "logs", label: "Audit Logs", icon: FileText },
+          { id: "notifications", label: "Notifications", icon: Bell }
         ].map((tab) => (
           <button
             key={tab.id}
@@ -633,8 +672,106 @@ export default function AdminDashboardPage() {
         </div>
       ) : (
         <>
-          {/* OVERVIEW TAB */}
+          {/* GLOBAL DASHBOARD OVERVIEW */}
           {activeTab === "overview" && stats && (
+            <div className="space-y-6">
+              {/* System Overview Counters */}
+              <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-5">
+                {[
+                  { title: "Total Registered Users", value: stats.totalUsers || 0, desc: "Accounts in database", icon: Users, color: "text-cyan-400" },
+                  { title: "Active Subscribers", value: stats.activeSubscribers || 0, desc: "Paid premium plans", icon: Shield, color: "text-emerald-400" },
+                  { title: "WhatsApp Connections", value: stats.whatsappConnected || 0, desc: "Active Baileys sessions", icon: Laptop, color: "text-purple-400" },
+                  { title: "Shopify Store Links", value: stats.shopifyConnected || 0, desc: "Linked stores", icon: ExternalLink, color: "text-cyan-400" },
+                  { title: "Total Automation Flow", value: stats.totalOrders || 0, desc: "Orders processed to date", icon: Activity, color: "text-emerald-400" }
+                ].map((s, i) => (
+                  <Card key={i} className="bg-black/30 border-border/40 hover:shadow-[0_0_15px_rgba(0,240,255,0.08)] transition-all">
+                    <CardHeader className="flex flex-row items-center justify-between pb-2 space-y-0">
+                      <CardTitle className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider">{s.title}</CardTitle>
+                      <s.icon className={`h-3.5 w-3.5 ${s.color}`} />
+                    </CardHeader>
+                    <CardContent>
+                      <div className="text-2xl font-bold text-white">{s.value}</div>
+                      <p className="text-[9px] text-muted-foreground mt-0.5">{s.desc}</p>
+                    </CardContent>
+                  </Card>
+                ))}
+              </div>
+
+              <div className="grid gap-4 md:grid-cols-7">
+                {/* Recent Activity Card */}
+                <Card className="col-span-4 bg-black/30 border-border/40">
+                  <CardHeader>
+                    <CardTitle className="text-white">Live Processing Stream</CardTitle>
+                    <CardDescription>Real-time Shopify orders and message automations</CardDescription>
+                  </CardHeader>
+                  <CardContent className="max-h-[350px] overflow-y-auto custom-scrollbar">
+                    {activities && activities.length > 0 ? (
+                      <div className="space-y-4">
+                        {activities.slice(0, 10).map((act, i) => (
+                          <div key={i} className="flex items-center gap-3 text-xs border-b border-white/[0.03] pb-2 last:border-0 last:pb-0">
+                            <div className="w-2.5 h-2.5 rounded-full bg-cyan-500 animate-ping" />
+                            <div className="flex-1">
+                              <p className="text-white font-medium">{act.message}</p>
+                              <span className="text-muted-foreground text-[10px]">{new Date(act.createdAt).toLocaleString()}</span>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    ) : (
+                      <div className="text-xs text-muted-foreground text-center py-12">No recent processing events.</div>
+                    )}
+                  </CardContent>
+                </Card>
+
+                {/* System Diagnostics Quick Summary */}
+                <Card className="col-span-3 bg-black/30 border-border/40">
+                  <CardHeader>
+                    <CardTitle className="text-white">Active Services Status</CardTitle>
+                    <CardDescription>Quick operational diagnostics overview</CardDescription>
+                  </CardHeader>
+                  <CardContent className="space-y-3.5 text-xs">
+                    {health && health.services ? (
+                      Object.entries(health.services).map(([name, data]: any) => (
+                        <div key={name} className="flex justify-between items-center bg-white/[0.01] p-2 rounded-lg border border-white/[0.03]">
+                          <span className="text-white font-medium capitalize">{name} Server</span>
+                          <div className="flex items-center gap-2">
+                            <span className="text-muted-foreground text-[10px] font-mono">{data.status === "Green" ? "OPERATIONAL" : "DEGRADED"}</span>
+                            <span className={`w-2.5 h-2.5 rounded-full ${data.status === "Green" ? "bg-emerald-400 shadow-[0_0_6px_#34d399]" : "bg-amber-400 shadow-[0_0_6px_#f59e0b]"}`} />
+                          </div>
+                        </div>
+                      ))
+                    ) : (
+                      <div className="text-xs text-muted-foreground text-center py-6">Diagnostics not loaded.</div>
+                    )}
+                  </CardContent>
+                </Card>
+              </div>
+
+              {/* Short Audit Trail */}
+              <Card className="bg-black/30 border-border/40">
+                <CardHeader className="py-4">
+                  <CardTitle className="text-white text-sm">Latest Audit Events</CardTitle>
+                  <CardDescription className="text-[11px]">Recent administrative audit logs</CardDescription>
+                </CardHeader>
+                <CardContent className="pb-4 pt-0">
+                  <div className="font-mono text-[10px] text-cyan-400/80 space-y-1">
+                    {logs && logs.length > 0 ? (
+                      logs.slice(0, 5).map((log) => (
+                        <div key={log.id} className="truncate border-b border-white/[0.02] pb-1">
+                          [{new Date(log.createdAt).toLocaleTimeString()}] <span className="text-white">{log.action}:</span> {log.details}
+                        </div>
+                      ))
+                    ) : (
+                      <div className="text-muted-foreground italic text-center py-2">No audit records.</div>
+                    )}
+                  </div>
+                </CardContent>
+              </Card>
+            </div>
+          )}
+
+          {/* REVENUE CENTER TAB */}
+          {activeTab === "revenue" && stats && (
             <div className="space-y-6">
               {/* Financial Metrics Row */}
               <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
@@ -652,28 +789,6 @@ export default function AdminDashboardPage() {
                     <CardContent>
                       <div className="text-2xl sm:text-3xl font-extrabold text-white">{s.value}</div>
                       <p className="text-[10px] text-muted-foreground mt-1">{s.desc}</p>
-                    </CardContent>
-                  </Card>
-                ))}
-              </div>
-
-              {/* Standard Counters Grid */}
-              <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-5">
-                {[
-                  { title: "Total Users", value: stats.totalUsers, desc: "Registered accounts", icon: Users, color: "text-cyan-400" },
-                  { title: "Lifetime Users", value: stats.lifetimeCustomers || 0, desc: "Infinite plan access", icon: Sparkles, color: "text-purple-400" },
-                  { title: "WhatsApp Active", value: stats.whatsappConnected, desc: "Connected sessions", icon: Laptop, color: "text-cyan-400" },
-                  { title: "Shopify Active", value: stats.shopifyConnected, desc: "Shopify connections", icon: ExternalLink, color: "text-cyan-400" },
-                  { title: "Total Orders Flow", value: stats.totalOrders, desc: "Automation events", icon: Activity, color: "text-cyan-400" }
-                ].map((s, i) => (
-                  <Card key={i} className="bg-black/30 border-border/40 hover:shadow-[0_0_15px_rgba(0,240,255,0.05)] transition-all">
-                    <CardHeader className="flex flex-row items-center justify-between pb-2 space-y-0">
-                      <CardTitle className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider">{s.title}</CardTitle>
-                      <s.icon className={`h-3.5 w-3.5 ${s.color}`} />
-                    </CardHeader>
-                    <CardContent>
-                      <div className="text-2xl font-bold text-white">{s.value}</div>
-                      <p className="text-[9px] text-muted-foreground mt-0.5">{s.desc}</p>
                     </CardContent>
                   </Card>
                 ))}
@@ -731,6 +846,127 @@ export default function AdminDashboardPage() {
                 </Card>
               </div>
             </div>
+          )}
+
+          {/* SYSTEM NOTIFICATIONS TAB */}
+          {activeTab === "notifications" && (
+            <Card className="bg-black/30 border-border/40">
+              <CardHeader className="flex flex-row items-center justify-between">
+                <div>
+                  <CardTitle className="text-white">System Notifications Registry</CardTitle>
+                  <CardDescription>Review and manage critical notifications triggered by automated background monitors</CardDescription>
+                </div>
+                <div className="flex items-center gap-2">
+                  {notifications.filter(n => !n.read).length > 0 && (
+                    <Button
+                      onClick={async () => {
+                        try {
+                          const res = await apiFetch("/notifications/read-all", { method: "PUT" })
+                          if (res.ok) {
+                            setNotifications(prev => prev.map(n => ({ ...n, read: true })))
+                          }
+                        } catch (err) {
+                          console.error("Mark read-all error:", err)
+                        }
+                      }}
+                      size="sm"
+                      variant="outline"
+                      className="border-border/40 text-cyan-400 hover:bg-cyan-950/20 text-xs cursor-pointer"
+                    >
+                      Mark All Read
+                    </Button>
+                  )}
+                  <Button
+                    onClick={fetchNotifications}
+                    size="sm"
+                    variant="outline"
+                    className="border-border/40 text-gray-300 hover:bg-white/5 text-xs cursor-pointer"
+                  >
+                    <RefreshCw className="w-3.5 h-3.5 mr-1" /> Reload
+                  </Button>
+                </div>
+              </CardHeader>
+              <CardContent>
+                <div className="border border-border/40 rounded-xl overflow-hidden bg-black/20 text-xs">
+                  <Table>
+                    <TableHeader className="bg-white/[0.02]">
+                      <TableRow>
+                        <TableHead className="text-muted-foreground w-12">Status</TableHead>
+                        <TableHead className="text-muted-foreground">Notification Message</TableHead>
+                        <TableHead className="text-muted-foreground w-36">Timestamp</TableHead>
+                        <TableHead className="text-right text-muted-foreground w-28">Actions</TableHead>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {notifications.length === 0 ? (
+                        <TableRow>
+                          <TableCell colSpan={4} className="text-center py-10 text-muted-foreground text-xs">
+                            No system notifications found in registry
+                          </TableCell>
+                        </TableRow>
+                      ) : (
+                        notifications.map((notif) => (
+                          <TableRow key={notif.id} className={`hover:bg-white/[0.01] ${!notif.read ? 'bg-cyan-950/5' : ''}`}>
+                            <TableCell className="text-center">
+                              {!notif.read ? (
+                                <span className="w-2.5 h-2.5 rounded-full bg-cyan-400 inline-block shadow-[0_0_8px_rgba(0,240,255,0.8)]" />
+                              ) : (
+                                <span className="w-2.5 h-2.5 rounded-full bg-white/10 inline-block" />
+                              )}
+                            </TableCell>
+                            <TableCell className={`font-medium ${!notif.read ? 'text-white font-semibold' : 'text-muted-foreground'}`}>
+                              {notif.message}
+                            </TableCell>
+                            <TableCell className="text-muted-foreground text-[11px] font-mono">
+                              {new Date(notif.createdAt).toLocaleString()}
+                            </TableCell>
+                            <TableCell className="text-right space-x-2 whitespace-nowrap">
+                              {!notif.read && (
+                                <Button
+                                  size="sm"
+                                  variant="outline"
+                                  onClick={async () => {
+                                    try {
+                                      const res = await apiFetch(`/notifications/${notif.id}/read`, { method: "PUT" })
+                                      if (res.ok) {
+                                        setNotifications(prev => prev.map(n => n.id === notif.id ? { ...n, read: true } : n))
+                                      }
+                                    } catch (err) {
+                                      console.error("Mark read error:", err)
+                                    }
+                                  }}
+                                  className="h-7 px-2.5 bg-cyan-500/10 text-cyan-400 hover:bg-cyan-500/20 border-cyan-500/30 rounded-lg text-xs cursor-pointer"
+                                >
+                                  Read
+                                </Button>
+                              )}
+                              <Button
+                                size="sm"
+                                variant="outline"
+                                onClick={async () => {
+                                  if (!confirm("Delete this notification?")) return
+                                  try {
+                                    const res = await apiFetch(`/notifications/${notif.id}`, { method: "DELETE" })
+                                    if (res.ok) {
+                                      setNotifications(prev => prev.filter(n => n.id !== notif.id))
+                                    }
+                                  } catch (err) {
+                                    console.error("Delete notification error:", err)
+                                  }
+                                }}
+                                className="h-7 px-2 bg-red-950/20 text-red-400 hover:bg-red-500 hover:text-black border-red-500/30 rounded-lg text-xs cursor-pointer"
+                              >
+                                <Trash2 className="w-3 h-3" />
+                              </Button>
+                            </TableCell>
+                          </TableRow>
+                        ))
+                      )}
+                    </TableBody>
+                  </Table>
+                </div>
+              </CardContent>
+            </Card>
           )}
 
           {/* USER REGISTRY TAB */}

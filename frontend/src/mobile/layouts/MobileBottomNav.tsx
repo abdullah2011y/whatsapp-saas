@@ -1,10 +1,11 @@
 "use client"
 
 import Link from "next/link"
-import { usePathname } from "next/navigation"
-import { Home, ShoppingCart, MessageCircle, BarChart3, Users, Plus, Lock, LucideIcon } from "lucide-react"
+import { usePathname, useSearchParams } from "next/navigation"
+import { Home, ShoppingCart, MessageCircle, BarChart3, Users, Lock, Sliders, Activity, FileText, LucideIcon } from "lucide-react"
 import { WHATSAPP_MODULE_ENABLED } from "@/shared/config/features"
 import * as React from "react"
+import { useAuth } from "@/shared/lib/auth"
 
 interface MobileTabItem {
   name: string
@@ -14,20 +15,36 @@ interface MobileTabItem {
   isComingSoon?: boolean
 }
 
-const tabs: MobileTabItem[] = [
+const tenantTabs: MobileTabItem[] = [
   { name: "Home", href: "/", icon: Home },
   { name: "Orders", href: "/orders", icon: ShoppingCart },
-  { name: "WhatsApp", href: "/whatsapp", icon: MessageCircle, isFab: true },
+  { name: "WhatsApp", href: "/whatsapp/overview", icon: MessageCircle, isFab: true },
   { name: "Analytics", href: "/analytics", icon: BarChart3 },
   { name: "Customers", href: "/customers", icon: Users },
 ]
 
+const superAdminTabs: MobileTabItem[] = [
+  { name: "Global", href: "/admin?tab=overview", icon: Home },
+  { name: "Users", href: "/admin?tab=users", icon: Users },
+  { name: "Plans", href: "/admin?tab=plans", icon: Sliders },
+  { name: "Health", href: "/admin?tab=health", icon: Activity },
+  { name: "Logs", href: "/admin?tab=logs", icon: FileText }
+]
+
 export function MobileBottomNav() {
   const pathname = usePathname()
+  const searchParams = useSearchParams()
+  const { user } = useAuth()
+
+  const currentTab = searchParams.get("tab") || "overview"
 
   // Feature Flag: Customize WhatsApp bottom tab if disabled
   const transformedTabs = React.useMemo(() => {
-    return tabs.map(tab => {
+    if (user?.role === "SUPERADMIN") {
+      return superAdminTabs
+    }
+
+    return tenantTabs.map(tab => {
       if (tab.name === "WhatsApp" && !WHATSAPP_MODULE_ENABLED) {
         return {
           ...tab,
@@ -38,13 +55,15 @@ export function MobileBottomNav() {
       }
       return tab
     })
-  }, [])
+  }, [user])
 
   return (
     <div className="fixed bottom-0 left-0 right-0 h-20 bg-black/80 backdrop-blur-lg border-t border-white/10 z-50 px-6 pb-safe">
       <div className="flex items-center justify-between h-full max-w-md mx-auto">
         {transformedTabs.map((tab) => {
-          const isActive = pathname === tab.href
+          const isActive = tab.href.includes("?")
+            ? pathname === tab.href.split("?")[0] && currentTab === new URLSearchParams(tab.href.split("?")[1]).get("tab")
+            : pathname === tab.href
           
           if (tab.isFab) {
             return (

@@ -2,7 +2,7 @@
 
 import * as React from "react"
 import Link from "next/link"
-import { usePathname } from "next/navigation"
+import { usePathname, useSearchParams } from "next/navigation"
 import {
   LayoutDashboard,
   ShoppingCart,
@@ -16,6 +16,13 @@ import {
   ChevronUp,
   Lock,
   Shield,
+  Key,
+  Sliders,
+  Coins,
+  Activity,
+  Database,
+  FileText,
+  Bell,
   LucideIcon
 } from "lucide-react"
 import { cn } from "@/shared/lib/utils"
@@ -37,7 +44,7 @@ interface SidebarNavigationItem {
   children?: SidebarSubItem[]
 }
 
-const navigation: SidebarNavigationItem[] = [
+const tenantNavigation: SidebarNavigationItem[] = [
   { name: 'Dashboard', href: '/', icon: LayoutDashboard },
   { name: 'Orders', href: '/orders', icon: ShoppingCart },
   {
@@ -59,8 +66,21 @@ const navigation: SidebarNavigationItem[] = [
   { name: 'Settings', href: '/settings', icon: Settings },
 ]
 
+const superAdminNavigation: SidebarNavigationItem[] = [
+  { name: 'Global Dashboard', href: '/admin?tab=overview', icon: LayoutDashboard },
+  { name: 'Users Registry', href: '/admin?tab=users', icon: Users },
+  { name: 'SaaS Plans', href: '/admin?tab=plans', icon: Sliders },
+  { name: 'Licenses', href: '/admin?tab=licenses', icon: Key },
+  { name: 'Revenue Center', href: '/admin?tab=revenue', icon: Coins },
+  { name: 'System Health', href: '/admin?tab=health', icon: Activity },
+  { name: 'Backup & Recovery', href: '/admin?tab=backups', icon: Database },
+  { name: 'Audit Logs', href: '/admin?tab=logs', icon: FileText },
+  { name: 'Notifications', href: '/admin?tab=notifications', icon: Bell },
+]
+
 export function Sidebar() {
   const pathname = usePathname()
+  const searchParams = useSearchParams()
   const { user, isImpersonating, stopImpersonate } = useAuth()
   const [collapsed, setCollapsed] = React.useState(false)
   const [whatsappOpen, setWhatsappOpen] = React.useState(true)
@@ -82,7 +102,11 @@ export function Sidebar() {
   }, [user])
 
   const navItems = React.useMemo(() => {
-    const items = navigation.map(item => {
+    if (user?.role === "SUPERADMIN") {
+      return superAdminNavigation
+    }
+
+    return tenantNavigation.map(item => {
       if (item.name === 'WhatsApp' && !WHATSAPP_MODULE_ENABLED) {
         return {
           ...item,
@@ -94,16 +118,6 @@ export function Sidebar() {
       }
       return item
     })
-
-    if (user?.role === "SUPERADMIN") {
-      items.push({
-        name: "Admin Portal",
-        href: "/admin",
-        icon: Shield
-      })
-    }
-
-    return items
   }, [user])
 
   return (
@@ -128,7 +142,11 @@ export function Sidebar() {
       <div className="flex-1 overflow-y-auto py-6 px-3 no-scrollbar space-y-1">
         {navItems.map((item) => {
           const isWhatsAppParent = item.name.startsWith("WhatsApp")
-          const isDirectActive = pathname === item.href
+          
+          const currentTab = searchParams.get("tab") || "overview"
+          const isDirectActive = item.href.includes("?")
+            ? pathname === item.href.split("?")[0] && currentTab === new URLSearchParams(item.href.split("?")[1]).get("tab")
+            : pathname === item.href
           
           // Parent WhatsApp is considered active if any of its sub-routes is active
           const isParentActive = isWhatsAppParent 

@@ -71,7 +71,9 @@ export function MobileLayout({ children }: { children: React.ReactNode }) {
         </AnimatePresence>
       </main>
 
-      <MobileBottomNav />
+      <React.Suspense fallback={<div className="fixed bottom-0 left-0 right-0 h-20 bg-black/80 border-t border-white/10" />}>
+        <MobileBottomNav />
+      </React.Suspense>
     </div>
   )
 }

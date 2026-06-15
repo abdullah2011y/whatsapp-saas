@@ -53,7 +53,13 @@ export default function Page() {
 
   return (
     <ProtectedRoute>
-      <AdminDashboardPage />
+      <React.Suspense fallback={
+        <div className="flex items-center justify-center min-h-screen bg-black">
+          <div className="text-cyan-500 text-xs animate-pulse font-mono">Loading Control Center...</div>
+        </div>
+      }>
+        <AdminDashboardPage />
+      </React.Suspense>
     </ProtectedRoute>
   )
 }
