@@ -63,15 +63,26 @@ export const updateAutomation = async (
   });
 };
 
+const incrementMessageCount = async (userId: string) => {
+  try {
+    await prisma.user.update({
+      where: { id: userId },
+      data: { messagesThisMonth: { increment: 1 } }
+    });
+  } catch (err) {
+    console.error("[Automation Service] Failed to increment message count:", err);
+  }
+};
+
 export const triggerAutomation = async (triggerType: string, order: any) => {
   try {
     const userId = order.userId || DEFAULT_USER_ID;
     console.log(`[Automation Trigger] Firing event "${triggerType}" for order ${order.orderName || order.id} under user ${userId}`);
 
-    // Verify user subscription status
+    // Verify user subscription status and message limits
     const user = await prisma.user.findUnique({
       where: { id: userId },
-      select: { role: true, plan: true, expiresAt: true, status: true }
+      include: { planRef: true }
     });
 
     if (user) {
@@ -81,6 +92,14 @@ export const triggerAutomation = async (triggerType: string, order: any) => {
       if (isExpired) {
         console.log(`[Automation Trigger] Execution skipped: User ${user.role} (ID: ${userId}) subscription is expired or inactive.`);
         return;
+      }
+
+      if (user.role !== "SUPERADMIN") {
+        const maxMessages = user.planRef ? user.planRef.maxMessages : 100;
+        if (user.messagesThisMonth >= maxMessages) {
+          console.log(`[Automation Trigger] Execution skipped: User ${user.email} (ID: ${userId}) has reached monthly message limit of ${maxMessages}.`);
+          return;
+        }
       }
     }
 
@@ -152,6 +171,7 @@ export const triggerAutomation = async (triggerType: string, order: any) => {
         if (isTemplateUsed) {
           console.log(`[Automation Trigger] Dispatching WhatsApp Web poll confirmation with template to ${order.phone}...`);
           await sendBaileysPoll(userId, order.phone, renderedBody, [confirmLabel, cancelLabel], order.id);
+          await incrementMessageCount(userId);
           console.log(`[FINAL_MESSAGE_SENT] Provider: WEB, Type: POLL, To: ${order.phone}, Content: ${renderedBody}`);
         } else {
           const fallbackText = `🛍️ ByteForge Order Confirmation\n\n` +
@@ -162,10 +182,12 @@ export const triggerAutomation = async (triggerType: string, order: any) => {
 
           console.log(`[Automation Trigger] Dispatching WhatsApp Web text confirmation to ${order.phone}...`);
           await sendBaileysTextMessage(userId, order.phone, fallbackText);
+          await incrementMessageCount(userId);
           console.log(`[FINAL_MESSAGE_SENT] Provider: WEB, Type: TEXT, To: ${order.phone}, Content: ${fallbackText}`);
 
           console.log(`[Automation Trigger] Dispatching WhatsApp Web poll confirmation to ${order.phone}...`);
           await sendBaileysPoll(userId, order.phone, "Confirm your order:", [confirmLabel, cancelLabel], order.id);
+          await incrementMessageCount(userId);
           console.log(`[FINAL_MESSAGE_SENT] Provider: WEB, Type: POLL, To: ${order.phone}, Content: Confirm your order:`);
         }
       } else {
@@ -173,6 +195,7 @@ export const triggerAutomation = async (triggerType: string, order: any) => {
         if (isTemplateUsed) {
           console.log(`[Automation Trigger] Dispatching WhatsApp Web notification message to ${order.phone}...`);
           await sendBaileysTextMessage(userId, order.phone, renderedBody);
+          await incrementMessageCount(userId);
           console.log(`[FINAL_MESSAGE_SENT] Provider: WEB, Type: TEXT, To: ${order.phone}, Content: ${renderedBody}`);
         } else {
           console.log(`[Automation Trigger] Trigger ${triggerType} is disabled or not configured, skipping.`);
@@ -184,10 +207,12 @@ export const triggerAutomation = async (triggerType: string, order: any) => {
         if (isTemplateUsed) {
           console.log(`[Automation Trigger] Dispatching Meta interactive confirmation to ${order.phone}...`);
           await sendOrderMessage(order, renderedBody);
+          await incrementMessageCount(userId);
           console.log(`[FINAL_MESSAGE_SENT] Provider: META, Type: INTERACTIVE, To: ${order.phone}, Content: ${renderedBody}`);
         } else {
           console.log(`[Automation Trigger] Fallback to Meta interactive button confirmation message`);
           await sendOrderMessage(order);
+          await incrementMessageCount(userId);
           const fallbackText = `🛍️ ByteForge Order Confirmation\n\n` +
             `Assalamualaikum ${order.customer} 👋\n\n` +
             `📦 Product: ${order.product}\n` +
@@ -200,6 +225,7 @@ export const triggerAutomation = async (triggerType: string, order: any) => {
         if (isTemplateUsed) {
           console.log(`[Automation Trigger] Dispatching Meta text notification message to ${order.phone}...`);
           await sendTextMessage(order.phone, renderedBody, userId);
+          await incrementMessageCount(userId);
           console.log(`[FINAL_MESSAGE_SENT] Provider: META, Type: TEXT, To: ${order.phone}, Content: ${renderedBody}`);
         } else {
           console.log(`[Automation Trigger] Trigger ${triggerType} is disabled or not configured, skipping.`);

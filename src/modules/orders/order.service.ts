@@ -2,6 +2,18 @@ import prisma from "../../config/database";
 import { triggerAutomation } from "../templates/automation.service";
 
 export const createOrder = async (userId: string, data: any) => {
+  const user = await prisma.user.findUnique({
+    where: { id: userId },
+    include: { planRef: true }
+  });
+  
+  if (user && user.role !== "SUPERADMIN") {
+    const maxOrders = user.planRef ? user.planRef.maxOrders : 100;
+    if (user.ordersThisMonth >= maxOrders) {
+      throw new Error(`Limit reached: Your current plan (${user.plan}) only allows up to ${maxOrders} orders per month.`);
+    }
+  }
+
   const count = await prisma.order.count({ where: { userId } });
   const nextOrderNumber = 1000 + count + 1;
 
@@ -11,11 +23,12 @@ export const createOrder = async (userId: string, data: any) => {
       customer: data.customer || "Unknown Customer",
       phone: data.phone,
       product: data.product,
-      amount: data.amount,
+      amount: Number(data.amount) || 0,
       orderNumber: data.orderNumber || nextOrderNumber,
       orderName: data.orderName || `#${data.orderNumber || nextOrderNumber}`,
       customerEmail: data.customerEmail || null,
       shopifyCustomerId: data.shopifyCustomerId || null,
+      shopifyOrderId: data.shopifyOrderId || null,
       address1: data.address1 || null,
       address2: data.address2 || null,
       city: data.city || null,
@@ -25,6 +38,15 @@ export const createOrder = async (userId: string, data: any) => {
       trackingNumber: data.trackingNumber || null,
       courierName: data.courierName || null,
     },
+  });
+
+  // Increment user usage metrics
+  await prisma.user.update({
+    where: { id: userId },
+    data: {
+      ordersThisMonth: { increment: 1 },
+      shopifyOrdersSynced: data.shopifyOrderId ? { increment: 1 } : undefined
+    }
   });
 
   await triggerAutomation("ORDER_CREATED", order);

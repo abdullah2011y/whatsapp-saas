@@ -48,7 +48,7 @@ const normalizeId = (id: string): string => {
 
 // Serialize session directory files to a base64 encoded JSON string
 const serializeSession = (userId: string): string | null => {
-  const sessionPath = path.join(process.cwd(), "sessions", userId);
+  const sessionPath = path.join(process.cwd(), "sessions", "user_" + userId);
   if (!fs.existsSync(sessionPath)) return null;
   const files = fs.readdirSync(sessionPath);
   const data: Record<string, string> = {};
@@ -63,7 +63,7 @@ const serializeSession = (userId: string): string | null => {
 
 // Restore session directory files from base64 JSON string
 const deserializeSession = (userId: string, dataStr: string) => {
-  const sessionPath = path.join(process.cwd(), "sessions", userId);
+  const sessionPath = path.join(process.cwd(), "sessions", "user_" + userId);
   if (!fs.existsSync(sessionPath)) {
     fs.mkdirSync(sessionPath, { recursive: true });
   }
@@ -121,7 +121,7 @@ export const deleteUserSession = async (userId: string) => {
   } catch (err) {
     console.error(`[Baileys Manager] Failed to clear session data from DB for user ${userId}:`, err);
   }
-  const sessionPath = path.join(process.cwd(), "sessions", userId);
+  const sessionPath = path.join(process.cwd(), "sessions", "user_" + userId);
   if (fs.existsSync(sessionPath)) {
     try {
       fs.rmSync(sessionPath, { recursive: true, force: true });
@@ -143,7 +143,7 @@ export const connectUser = async (userId: string) => {
   statusCache.set(userId, "CONNECTING");
   qrCache.delete(userId);
 
-  const sessionPath = path.join(process.cwd(), "sessions", userId);
+  const sessionPath = path.join(process.cwd(), "sessions", "user_" + userId);
   
   // Restore session directory from DB if missing locally
   if (!fs.existsSync(sessionPath)) {

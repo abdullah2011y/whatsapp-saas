@@ -15,6 +15,7 @@ import automationRoutes from "./modules/templates/automation.routes";
 import adminRoutes from "./modules/admin/admin.routes";
 import notificationRoutes from "./modules/notifications/notification.routes";
 import { startSubscriptionScheduler } from "./modules/admin/subscription-monitor.service";
+import { systemMiddleware } from "./shared/middlewares/system.middleware";
 
 const app = express();
 
@@ -24,6 +25,8 @@ app.use(express.json({
     req.rawBody = buf;
   }
 }));
+
+app.use(systemMiddleware as any);
 
 // Orders Routes
 app.use("/orders", orderRoutes);
@@ -73,6 +76,7 @@ app.get("/", (req, res) => {
 
 
 import { initializeDatabase } from "./config/init_db";
+import { startWorkers } from "./config/workers";
 
 const PORT = 5000;
 
@@ -81,6 +85,7 @@ app.listen(PORT, () => {
   initializeDatabase().catch((err) => {
     console.error("[Startup] Failed to initialize database and sessions:", err);
   });
+  startWorkers();
   startSubscriptionScheduler();
 });
 // Dashboard routes: /dashboard/stats, /dashboard/analytics, /dashboard/customers

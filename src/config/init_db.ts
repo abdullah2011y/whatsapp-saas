@@ -51,6 +51,107 @@ async function seedSuperAdmin() {
   }
 }
 
+async function seedPlans() {
+  console.log("[Startup] Seeding SaaS plans...");
+  const plans = [
+    {
+      name: "Free",
+      priceMonthly: 0,
+      priceYearly: 0,
+      durationDays: 30,
+      maxOrders: 100,
+      maxMessages: 100,
+      maxTemplates: 10,
+      maxAutomations: 5,
+      maxSessions: 1,
+      features: JSON.stringify(["BASIC_ANALYTICS"])
+    },
+    {
+      name: "Starter",
+      priceMonthly: 19,
+      priceYearly: 190,
+      durationDays: 30,
+      maxOrders: 500,
+      maxMessages: 500,
+      maxTemplates: 20,
+      maxAutomations: 10,
+      maxSessions: 2,
+      features: JSON.stringify(["BASIC_ANALYTICS", "SUPPORT"])
+    },
+    {
+      name: "Growth",
+      priceMonthly: 49,
+      priceYearly: 490,
+      durationDays: 30,
+      maxOrders: 2000,
+      maxMessages: 5000,
+      maxTemplates: 50,
+      maxAutomations: 20,
+      maxSessions: 3,
+      features: JSON.stringify(["ADVANCED_ANALYTICS", "SUPPORT", "SHOPIFY_SYNC"])
+    },
+    {
+      name: "Business",
+      priceMonthly: 99,
+      priceYearly: 990,
+      durationDays: 30,
+      maxOrders: 10000,
+      maxMessages: 20000,
+      maxTemplates: 100,
+      maxAutomations: 50,
+      maxSessions: 5,
+      features: JSON.stringify(["ADVANCED_ANALYTICS", "PRIORITY_SUPPORT", "SHOPIFY_SYNC", "API_ACCESS"])
+    },
+    {
+      name: "Enterprise",
+      priceMonthly: 299,
+      priceYearly: 2990,
+      durationDays: 30,
+      maxOrders: 999999,
+      maxMessages: 999999,
+      maxTemplates: 999,
+      maxAutomations: 999,
+      maxSessions: 999,
+      features: JSON.stringify(["ADVANCED_ANALYTICS", "DEDICATED_SUPPORT", "SHOPIFY_SYNC", "API_ACCESS", "WHITELABEL"])
+    },
+    {
+      name: "Lifetime",
+      priceMonthly: 999,
+      priceYearly: 9999,
+      durationDays: 99999,
+      maxOrders: 999999,
+      maxMessages: 999999,
+      maxTemplates: 999,
+      maxAutomations: 999,
+      maxSessions: 999,
+      features: JSON.stringify(["ADVANCED_ANALYTICS", "DEDICATED_SUPPORT", "SHOPIFY_SYNC", "API_ACCESS", "WHITELABEL", "LIFETIME"])
+    }
+  ];
+
+  try {
+    for (const plan of plans) {
+      await prisma.saaSPlan.upsert({
+        where: { name: plan.name },
+        update: {
+          priceMonthly: plan.priceMonthly,
+          priceYearly: plan.priceYearly,
+          durationDays: plan.durationDays,
+          maxOrders: plan.maxOrders,
+          maxMessages: plan.maxMessages,
+          maxTemplates: plan.maxTemplates,
+          maxAutomations: plan.maxAutomations,
+          maxSessions: plan.maxSessions,
+          features: plan.features
+        },
+        create: plan
+      });
+    }
+    console.log("[Startup] SaaS plans seeded successfully.");
+  } catch (err) {
+    console.error("[Startup] Failed to seed SaaS plans:", err);
+  }
+}
+
 async function runAutoArchivingCheck() {
   console.log("[Startup] Triggering subscription monitor check...");
   try {
@@ -86,6 +187,9 @@ export async function initializeDatabase() {
 
     // Run the super admin seed
     await seedSuperAdmin();
+
+    // Seed SaaS plans
+    await seedPlans();
 
     // Run the auto-archiving check
     await runAutoArchivingCheck();

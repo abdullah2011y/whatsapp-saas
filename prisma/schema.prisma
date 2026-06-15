@@ -36,26 +36,35 @@ enum ProcessStatus {
 // ==========================================
 
 model User {
-  id               String            @id @default(uuid())
-  name             String
-  email            String            @unique
-  password         String
-  role             String            @default("USER")
-  status           String            @default("ACTIVE") // ACTIVE, SUSPENDED, ARCHIVED
-  company          String?
-  plan             String            @default("Free")
-  licenseKey       String?
-  expiresAt        DateTime?
-  createdAt        DateTime          @default(now())
-  settings         Settings?
-  whatsappSession  WhatsappSession?
-  templates        Template[]
-  automations      Automation[]
-  orders           Order[]
-  whatsappPolls    WhatsappPoll[]
-  licenseKeys      LicenseKey[]
-  auditLogs        AuditLog[]
-  notifications    Notification[]
+  id                  String            @id @default(uuid())
+  name                String
+  email               String            @unique
+  password            String
+  role                String            @default("USER")
+  status              String            @default("ACTIVE") // ACTIVE, SUSPENDED, ARCHIVED
+  company             String?
+  plan                String            @default("Free")
+  planId              String?
+  planRef             SaaSPlan?         @relation(fields: [planId], references: [id], onDelete: SetNull)
+  licenseKey          String?
+  expiresAt           DateTime?
+  ordersThisMonth     Int               @default(0)
+  messagesThisMonth   Int               @default(0)
+  shopifyOrdersSynced Int               @default(0)
+  lastUsageReset      DateTime          @default(now())
+  twoFactorEnabled    Boolean           @default(false)
+  twoFactorSecret     String?
+  createdAt           DateTime          @default(now())
+  settings            Settings?
+  whatsappSession     WhatsappSession?
+  templates           Template[]
+  automations         Automation[]
+  orders              Order[]
+  whatsappPolls       WhatsappPoll[]
+  licenseKeys         LicenseKey[]
+  auditLogs           AuditLog[]
+  notifications       Notification[]
+  loginHistories      LoginHistory[]
 }
 
 model Order {
@@ -87,6 +96,7 @@ model Order {
   createdAt         DateTime      @default(now())
   updatedAt         DateTime      @default(now()) @updatedAt
 
+  @@index([userId])
   @@index([source])
   @@index([status])
   @@index([processStatus])
@@ -105,6 +115,8 @@ model Template {
   automations Automation[]
   createdAt   DateTime     @default(now())
   updatedAt   DateTime     @updatedAt
+
+  @@index([userId])
 }
 
 model Automation {
@@ -154,6 +166,13 @@ model Settings {
   pollConfirmLabel       String   @default("✅ Yes Confirmed")
   pollCancelLabel        String   @default("❌ No Cancelled")
   createdAt              DateTime @default(now())
+
+  // White Label Configuration
+  logoUrl                String?
+  brandName              String?
+  companyName            String?
+  emailFooter            String?
+  whatsappBranding       String?
 }
 
 model WhatsappSession {
@@ -181,6 +200,8 @@ model WhatsappPoll {
   provider      String   @default("WEB")
   phoneNumber   String?
   createdAt     DateTime @default(now())
+
+  @@index([userId])
 }
 
 model LicenseKey {
@@ -193,6 +214,8 @@ model LicenseKey {
   expiresAt    DateTime?
   userId       String?
   user         User?     @relation(fields: [userId], references: [id], onDelete: SetNull)
+
+  @@index([userId])
 }
 
 model AuditLog {
@@ -203,6 +226,8 @@ model AuditLog {
   targetId  String?
   details   String?
   createdAt DateTime @default(now())
+
+  @@index([userId])
 }
 
 model Notification {
@@ -213,4 +238,50 @@ model Notification {
   type      String   @default("INFO") // INFO, WARNING, EXPIRE_WARNING, CRITICAL
   read      Boolean  @default(false)
   createdAt DateTime @default(now())
+
+  @@index([userId])
+}
+
+model SaaSPlan {
+  id             String    @id @default(uuid())
+  name           String    @unique
+  priceMonthly   Float
+  priceYearly    Float
+  durationDays   Int       @default(30)
+  maxOrders      Int       @default(100)
+  maxMessages    Int       @default(100)
+  maxTemplates   Int       @default(10)
+  maxAutomations Int       @default(5)
+  maxSessions    Int       @default(1)
+  features       String    @default("[]") // JSON string of features, e.g. ["WHITELABEL"]
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
+  users          User[]
+}
+
+model LoginHistory {
+  id        String   @id @default(uuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  ipAddress String?
+  userAgent String?
+  device    String?
+  createdAt DateTime @default(now())
+
+  @@index([userId])
+}
+
+model Backup {
+  id          String   @id @default(uuid())
+  filename    String
+  sizeBytes   Int
+  status      String   @default("COMPLETED") // COMPLETED, FAILED
+  createdById String?
+  createdAt   DateTime @default(now())
+}
+
+model SystemConfig {
+  key       String   @id
+  value     String
+  updatedAt DateTime @updatedAt
 }

@@ -61,7 +61,7 @@ const navigation: SidebarNavigationItem[] = [
 
 export function Sidebar() {
   const pathname = usePathname()
-  const { user } = useAuth()
+  const { user, isImpersonating, stopImpersonate } = useAuth()
   const [collapsed, setCollapsed] = React.useState(false)
   const [whatsappOpen, setWhatsappOpen] = React.useState(true)
 
@@ -229,6 +229,14 @@ export function Sidebar() {
       </div>
 
       <div className="p-4 border-t border-border/40 space-y-2">
+        {isImpersonating && !collapsed && (
+          <Button
+            onClick={() => stopImpersonate()}
+            className="w-full bg-purple-600 hover:bg-purple-700 text-white font-semibold text-xs py-1.5 rounded-lg transition-all animate-pulse"
+          >
+            Return to Admin
+          </Button>
+        )}
         {!collapsed && (
           <div className="text-[10px] text-muted-foreground text-center font-mono">
             Current Role: {user?.role || "GUEST"}

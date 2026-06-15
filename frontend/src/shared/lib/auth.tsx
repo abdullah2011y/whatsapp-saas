@@ -21,6 +21,9 @@ interface AuthContextType {
   isLoading: boolean
   login: (token: string, user: User) => void
   logout: () => void
+  impersonate: (targetToken: string, targetUser: User) => void
+  stopImpersonate: () => void
+  isImpersonating: boolean
 }
 
 const AuthContext = createContext<AuthContextType>({
@@ -28,18 +31,25 @@ const AuthContext = createContext<AuthContextType>({
   token: null,
   isLoading: true,
   login: () => {},
-  logout: () => {}
+  logout: () => {},
+  impersonate: () => {},
+  stopImpersonate: () => {},
+  isImpersonating: false
 })
 
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<User | null>(null)
   const [token, setToken] = useState<string | null>(null)
   const [isLoading, setIsLoading] = useState(true)
+  const [isImpersonating, setIsImpersonating] = useState(false)
   const router = useRouter()
 
   useEffect(() => {
     const initAuth = async () => {
       const storedToken = localStorage.getItem("token")
+      const adminToken = localStorage.getItem("admin_token")
+      setIsImpersonating(!!adminToken)
+
       if (storedToken) {
         try {
           const res = await fetch(`${API_BASE_URL}/auth/me`, {
@@ -54,6 +64,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
             console.log("CURRENT_ROLE", data.user?.role);
           } else {
             localStorage.removeItem("token")
+            localStorage.removeItem("admin_token")
+            setIsImpersonating(false)
           }
         } catch (error) {
           console.error("Auth init error:", error)
@@ -76,13 +88,56 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const logout = () => {
     localStorage.removeItem("token")
+    localStorage.removeItem("admin_token")
     setToken(null)
     setUser(null)
+    setIsImpersonating(false)
     router.push("/login")
   }
 
+  const impersonate = (targetToken: string, targetUser: User) => {
+    const currentToken = localStorage.getItem("token")
+    if (currentToken) {
+      localStorage.setItem("admin_token", currentToken)
+    }
+    localStorage.setItem("token", targetToken)
+    setToken(targetToken)
+    setUser(targetUser)
+    setIsImpersonating(true)
+    router.push("/")
+  }
+
+  const stopImpersonate = async () => {
+    const adminToken = localStorage.getItem("admin_token")
+    if (!adminToken) return
+
+    localStorage.setItem("token", adminToken)
+    localStorage.removeItem("admin_token")
+    setToken(adminToken)
+    setIsImpersonating(false)
+
+    try {
+      setIsLoading(true)
+      const res = await fetch(`${API_BASE_URL}/auth/me`, {
+        headers: { Authorization: `Bearer ${adminToken}` }
+      })
+      if (res.ok) {
+        const data = await res.json()
+        setUser(data.user)
+        router.push("/admin")
+      } else {
+        logout()
+      }
+    } catch (err) {
+      console.error("Failed to restore admin session:", err)
+      logout()
+    } finally {
+      setIsLoading(false)
+    }
+  }
+
   return (
-    <AuthContext.Provider value={{ user, token, isLoading, login, logout }}>
+    <AuthContext.Provider value={{ user, token, isLoading, login, logout, impersonate, stopImpersonate, isImpersonating }}>
       {children}
     </AuthContext.Provider>
   )

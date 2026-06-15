@@ -22,6 +22,18 @@ export const renderTemplate = (content: string, order: any): string => {
 };
 
 export const createTemplate = async (userId: string, name: string, content: string) => {
+  const user = await prisma.user.findUnique({
+    where: { id: userId },
+    include: { planRef: true }
+  });
+  if (user && user.role !== "SUPERADMIN") {
+    const maxTemplates = user.planRef ? user.planRef.maxTemplates : 10;
+    const count = await prisma.template.count({ where: { userId } });
+    if (count >= maxTemplates) {
+      throw new Error(`Limit reached: Your current plan (${user.plan}) only allows up to ${maxTemplates} templates.`);
+    }
+  }
+
   return await prisma.template.create({
     data: { userId, name, content }
   });

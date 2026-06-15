@@ -1,5 +1,6 @@
 import { Router, Response } from "express";
 import { authMiddleware, AuthenticatedRequest } from "../auth/auth.middleware";
+import { tenantMiddleware } from "../../shared/middlewares/tenant.middleware";
 import {
   getTemplates,
   createTemplate,
@@ -39,7 +40,7 @@ router.post("/", async (req: AuthenticatedRequest, res: Response) => {
   }
 });
 
-router.put("/:id", async (req: AuthenticatedRequest, res: Response) => {
+router.put("/:id", tenantMiddleware("template") as any, async (req: AuthenticatedRequest, res: Response) => {
   try {
     const userId = req.user?.id!;
     const id = String(req.params.id);
@@ -54,7 +55,7 @@ router.put("/:id", async (req: AuthenticatedRequest, res: Response) => {
   }
 });
 
-router.delete("/:id", async (req: AuthenticatedRequest, res: Response) => {
+router.delete("/:id", tenantMiddleware("template") as any, async (req: AuthenticatedRequest, res: Response) => {
   try {
     const userId = req.user?.id!;
     const id = String(req.params.id);

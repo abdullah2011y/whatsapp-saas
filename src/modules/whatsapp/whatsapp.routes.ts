@@ -343,6 +343,23 @@ router.post("/meta/test", async (req: AuthenticatedRequest, res: Response) => {
       });
 
       if (response.data && response.data.id === phoneNumberId) {
+        // Check session limits
+        const user = await prisma.user.findUnique({
+          where: { id: userId },
+          include: { planRef: true }
+        });
+        if (user && user.role !== "SUPERADMIN") {
+          const maxSessions = user.planRef ? user.planRef.maxSessions : 1;
+          let activeSessionCount = 0;
+          const session = await prisma.whatsappSession.findUnique({ where: { userId } });
+          if (session?.connected) activeSessionCount++;
+          if (activeSessionCount >= maxSessions) {
+            return res.status(400).json({ 
+              error: `Limit reached: Your current plan (${user.plan}) only allows up to ${maxSessions} active WhatsApp sessions.` 
+            });
+          }
+        }
+
         await prisma.settings.update({
           where: { userId },
           data: { metaConnected: true }
@@ -393,6 +410,27 @@ router.post("/meta/disconnect", async (req: AuthenticatedRequest, res: Response)
 router.post("/web/connect", async (req: AuthenticatedRequest, res: Response) => {
   try {
     const userId = req.user?.id!;
+    
+    // Check session limits
+    const user = await prisma.user.findUnique({
+      where: { id: userId },
+      include: { planRef: true }
+    });
+    if (user && user.role !== "SUPERADMIN") {
+      const maxSessions = user.planRef ? user.planRef.maxSessions : 1;
+      let activeSessionCount = 0;
+      const settings = await prisma.settings.findUnique({ where: { userId } });
+      const session = await prisma.whatsappSession.findUnique({ where: { userId } });
+      if (settings?.metaConnected) activeSessionCount++;
+      if (session?.connected) activeSessionCount++;
+
+      if (activeSessionCount >= maxSessions) {
+        return res.status(400).json({ 
+          error: `Limit reached: Your current plan (${user.plan}) only allows up to ${maxSessions} active WhatsApp sessions.` 
+        });
+      }
+    }
+
     connectUser(userId).catch((err) => {
       console.error(`Error connecting user ${userId}:`, err);
     });
