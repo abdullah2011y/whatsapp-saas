@@ -20,7 +20,11 @@ const getMetaCredentials = async (userId: string) => {
 
 export const sendOrderMessage = async (order: any, bodyText?: string) => {
   try {
-    const userId = order.userId || DEFAULT_USER_ID;
+    const userId = order.userId;
+    if (!userId) {
+      console.error("[WhatsApp Service] Error: Order has no userId. Tenant isolation requires a valid userId. Skipping sendOrderMessage.");
+      return;
+    }
     const { token, phoneNumberId } = await getMetaCredentials(userId);
 
     if (!token || !phoneNumberId) {
@@ -28,8 +32,18 @@ export const sendOrderMessage = async (order: any, bodyText?: string) => {
       return;
     }
 
+    // Retrieve settings/user to resolve store/brand name dynamically for fallback
+    const settings = await prisma.settings.findUnique({
+      where: { userId }
+    });
+    const user = await prisma.user.findUnique({
+      where: { id: userId }
+    });
+
+    const storeName = settings?.brandName || settings?.companyName || user?.company || user?.name || "Store";
+
     const textContent = bodyText || (
-      `🛍️ ByteForge Order Confirmation\n\n` +
+      `🛍️ ${storeName} Order Confirmation\n\n` +
       `Assalamualaikum ${order.customer} 👋\n\n` +
       `📦 Product: ${order.product}\n` +
       `💰 Amount: Rs ${order.amount}\n\n` +
@@ -90,7 +104,11 @@ export const sendOrderMessage = async (order: any, bodyText?: string) => {
 
 export const sendTextMessage = async (phone: string, bodyText: string, userId?: string) => {
   try {
-    const finalUserId = userId || DEFAULT_USER_ID;
+    const finalUserId = userId;
+    if (!finalUserId) {
+      console.error("[WhatsApp Service] Error: No userId provided. Tenant isolation requires a valid userId. Skipping sendTextMessage.");
+      return;
+    }
     const { token, phoneNumberId } = await getMetaCredentials(finalUserId);
 
     if (!token || !phoneNumberId) {

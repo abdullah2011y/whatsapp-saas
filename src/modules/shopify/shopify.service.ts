@@ -81,37 +81,55 @@ export const handleShopifyOrderCreate = async (payload: any, shopDomain?: string
     return existingOrder;
   }
 
+  // Add debug logs for payload properties
+  console.log(`[Shopify Service Payload Debug] payload.customer:`, JSON.stringify(payload.customer));
+  console.log(`[Shopify Service Payload Debug] payload.customer.first_name:`, payload.customer?.first_name);
+  console.log(`[Shopify Service Payload Debug] payload.customer.last_name:`, payload.customer?.last_name);
+  console.log(`[Shopify Service Payload Debug] payload.customer.phone:`, payload.customer?.phone);
+  console.log(`[Shopify Service Payload Debug] payload.billing_address:`, JSON.stringify(payload.billing_address));
+  console.log(`[Shopify Service Payload Debug] payload.shipping_address:`, JSON.stringify(payload.shipping_address));
+  console.log(`[Shopify Service Payload Debug] payload.total_price:`, payload.total_price);
+  console.log(`[Shopify Service Payload Debug] payload.current_total_price:`, payload.current_total_price);
+  console.log(`[Shopify Service Payload Debug] payload.line_items:`, JSON.stringify(payload.line_items));
+  console.log(`[Shopify Service Payload Debug] payload.currency:`, payload.currency);
+
   // Extract customer info
-  let customerName = "";
+  let resolvedCustomerName = "";
   if (payload.customer) {
-    customerName = `${payload.customer.first_name || ""} ${payload.customer.last_name || ""}`.trim();
+    resolvedCustomerName = `${payload.customer.first_name || ""} ${payload.customer.last_name || ""}`.trim();
   }
-  if (!customerName && payload.shipping_address) {
-    customerName = `${payload.shipping_address.first_name || ""} ${payload.shipping_address.last_name || ""}`.trim();
+  if (!resolvedCustomerName && payload.shipping_address) {
+    resolvedCustomerName = (payload.shipping_address.name || "").trim();
   }
-  if (!customerName && payload.billing_address) {
-    customerName = `${payload.billing_address.first_name || ""} ${payload.billing_address.last_name || ""}`.trim();
+  if (!resolvedCustomerName && payload.billing_address) {
+    resolvedCustomerName = (payload.billing_address.name || "").trim();
   }
-  if (!customerName) {
-    customerName = "Unknown Customer";
+  if (!resolvedCustomerName) {
+    resolvedCustomerName = "Unknown Customer";
   }
   
-  let extractedPhone = (
+  let resolvedPhone = (
     payload.shipping_address?.phone || 
-    payload.customer?.phone || 
     payload.billing_address?.phone || 
+    payload.customer?.phone || 
     payload.customer?.default_address?.phone ||
     payload.phone || 
     ""
   ).trim();
 
-  const phone = extractedPhone || "Unknown Phone";
+  if (!resolvedPhone) {
+    resolvedPhone = "Unknown Phone";
+  }
   
   // Extract product info
   const productTitle = payload.line_items?.[0]?.title || "Unknown Product";
   
-  // Extract amount
-  const amount = parseFloat(payload.total_price || "0");
+  // Extract amount with fallback to total_price
+  let rawAmount = payload.current_total_price ?? payload.total_price ?? "0";
+  let resolvedAmount = parseFloat(String(rawAmount));
+  if (isNaN(resolvedAmount)) {
+    resolvedAmount = 0;
+  }
   
   // Extract created time
   const createdAt = payload.created_at ? new Date(payload.created_at) : new Date();
@@ -131,16 +149,21 @@ export const handleShopifyOrderCreate = async (payload: any, shopDomain?: string
   const country = payload.shipping_address?.country || null;
 
   console.log(`[Shopify Webhook] Saving new order for user ${resolvedUserId}: ${shopifyOrderId} (${orderName})`);
+  
+  // Log final resolved values right before database insertion
+  console.log(`[Shopify Service Resolved Values] resolvedCustomerName: ${resolvedCustomerName}`);
+  console.log(`[Shopify Service Resolved Values] resolvedPhone: ${resolvedPhone}`);
+  console.log(`[Shopify Service Resolved Values] resolvedAmount: ${resolvedAmount}`);
 
   // Create new order in Prisma
   const newOrder = await prisma.order.create({
     data: {
       userId: resolvedUserId,
       shopifyOrderId,
-      customer: customerName || "Unknown Customer",
-      phone: phone,
+      customer: resolvedCustomerName,
+      phone: resolvedPhone,
       product: productTitle,
-      amount: amount,
+      amount: resolvedAmount,
       status: "PENDING",
       orderNumber,
       orderName,

@@ -39,7 +39,13 @@ export const getAutomations = async (userId: string) => {
   await initializeAutomations(userId);
   return await prisma.automation.findMany({
     where: { userId },
-    include: { template: true },
+    include: {
+      template: {
+        where: {
+          userId: userId
+        }
+      }
+    },
     orderBy: { trigger: "asc" }
   });
 };
@@ -51,6 +57,16 @@ export const updateAutomation = async (
   templateId: string | null,
   providerOverride: string | null = null
 ) => {
+  // Enforce tenant isolation check: template must belong to this userId
+  if (templateId) {
+    const template = await prisma.template.findFirst({
+      where: { id: templateId, userId }
+    });
+    if (!template) {
+      throw new Error("Unauthorized: Selected template does not belong to the authenticated user");
+    }
+  }
+
   return await prisma.automation.upsert({
     where: {
       userId_trigger: {
@@ -76,8 +92,16 @@ const incrementMessageCount = async (userId: string) => {
 
 export const triggerAutomation = async (triggerType: string, order: any) => {
   try {
-    const userId = order.userId || DEFAULT_USER_ID;
+    const userId = order.userId;
+    if (!userId) {
+      console.error(`[Automation Trigger] Error: Order ${order.id} has no userId. Tenant isolation requires a valid userId. Skipping execution.`);
+      return;
+    }
     console.log(`[Automation Trigger] Firing event "${triggerType}" for order ${order.orderName || order.id} under user ${userId}`);
+
+    // Log the order information
+    console.log(`[Automation Diagnostic Logs] order.id: ${order.id}`);
+    console.log(`[Automation Diagnostic Logs] order.userId: ${userId}`);
 
     // Verify user subscription status and message limits
     const user = await prisma.user.findUnique({
@@ -114,8 +138,32 @@ export const triggerAutomation = async (triggerType: string, order: any) => {
           trigger: triggerType
         }
       },
-      include: { template: true }
+      include: {
+        template: {
+          where: {
+            userId: userId
+          }
+        }
+      }
     });
+
+    // Output query details
+    console.log(`[Automation Audit] Automation Query: prisma.automation.findUnique({ where: { userId_trigger: { userId: "${userId}", trigger: "${triggerType}" } }, include: { template: { where: { userId: "${userId}" } } } })`);
+    console.log(`[Automation Audit] Selected Template ID: ${config?.template?.id || "N/A"}`);
+    console.log(`[Automation Audit] Selected Template Owner ID: ${config?.template?.userId || "N/A"}`);
+    console.log(`[Automation Audit] Order Owner ID: ${userId}`);
+
+    // Log details
+    console.log(`[Automation Diagnostic Logs] automation.userId: ${config?.userId || "N/A"}`);
+    console.log(`[Automation Diagnostic Logs] template.id: ${config?.template?.id || "N/A"}`);
+    console.log(`[Automation Diagnostic Logs] template.userId: ${config?.template?.userId || "N/A"}`);
+    console.log(`[Automation Diagnostic Logs] template.name: ${config?.template?.name || "N/A"}`);
+
+    if (config) {
+      console.log(`[Automation Diagnostic] Automation selected for order: triggerType=${triggerType}, enabled=${config.isEnabled}`);
+    } else {
+      console.log(`[Automation Diagnostic] Automation selected for order: NONE for triggerType=${triggerType}`);
+    }
 
     let isTemplateUsed = false;
     let templateName = "";
@@ -130,10 +178,10 @@ export const triggerAutomation = async (triggerType: string, order: any) => {
       templateContent = config.template.content;
       renderedBody = renderTemplate(templateContent, order);
 
-      console.log(`[TEMPLATE_SELECTED] Name: ${templateName}`);
-      console.log(`[TEMPLATE_ID] ${templateId}`);
-      console.log(`[TEMPLATE_CONTENT_FROM_DB] ${templateContent}`);
-      console.log(`[TEMPLATE_RENDERED] ${renderedBody}`);
+      console.log(`[Automation Diagnostic] Template selected for order: ${templateName} (ID: ${templateId})`);
+      console.log(`[Automation Diagnostic] Message generated from template: "${renderedBody}"`);
+    } else {
+      console.log(`[Automation Diagnostic] Template selected for order: NONE (Using Fallback)`);
     }
 
     // Resolve which provider to use based on connection states (Phase 6)
@@ -174,9 +222,13 @@ export const triggerAutomation = async (triggerType: string, order: any) => {
           await incrementMessageCount(userId);
           console.log(`[FINAL_MESSAGE_SENT] Provider: WEB, Type: POLL, To: ${order.phone}, Content: ${renderedBody}`);
         } else {
-          const fallbackText = `🛍️ ByteForge Order Confirmation\n\n` +
+          const storeName = settings?.brandName || settings?.companyName || user?.company || user?.name || "Store";
+          const storeUrl = settings?.shopifyDomain || "";
+          const storeUrlSuffix = storeUrl ? ` (${storeUrl})` : "";
+
+          const fallbackText = `🛍️ ${storeName} Order Confirmation\n\n` +
             `Assalam O Alikum  ${order.customer} 👋\n\n` +
-            `Apne Byteforge.pk Sy : ${order.product} Order Kia Ha\n` +
+            `Apne ${storeName}${storeUrlSuffix} Sy : ${order.product} Order Kia Ha\n` +
             `Jiske Amount Hai: PKR ${order.amount}\n\n` +
             `Kindly Order Confirm Krden Taky Hum Further Process Kr Sken`;
 
@@ -210,14 +262,16 @@ export const triggerAutomation = async (triggerType: string, order: any) => {
           await incrementMessageCount(userId);
           console.log(`[FINAL_MESSAGE_SENT] Provider: META, Type: INTERACTIVE, To: ${order.phone}, Content: ${renderedBody}`);
         } else {
-          console.log(`[Automation Trigger] Fallback to Meta interactive button confirmation message`);
-          await sendOrderMessage(order);
-          await incrementMessageCount(userId);
-          const fallbackText = `🛍️ ByteForge Order Confirmation\n\n` +
+          const storeName = settings?.brandName || settings?.companyName || user?.company || user?.name || "Store";
+          const fallbackText = `🛍️ ${storeName} Order Confirmation\n\n` +
             `Assalamualaikum ${order.customer} 👋\n\n` +
             `📦 Product: ${order.product}\n` +
             `💰 Amount: Rs ${order.amount}\n\n` +
             `Please confirm your order below 👇`;
+
+          console.log(`[Automation Trigger] Fallback to Meta interactive button confirmation message`);
+          await sendOrderMessage(order, fallbackText);
+          await incrementMessageCount(userId);
           console.log(`[FINAL_MESSAGE_SENT] Provider: META, Type: INTERACTIVE, To: ${order.phone}, Content: ${fallbackText}`);
         }
       } else {
