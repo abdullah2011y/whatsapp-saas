@@ -313,7 +313,8 @@ export default function MobileOrdersPage() {
                     <button 
                       onClick={() => {
                         closeDetailsModal();
-                        router.push(`/customers/${selectedOrderDetails.phone}`);
+                        const customerId = selectedOrderDetails.shopifyCustomerId || selectedOrderDetails.customerEmail || selectedOrderDetails.phone;
+                        router.push(`/customers/${customerId}`);
                       }}
                       className="w-full py-3 bg-cyan-500 hover:bg-cyan-600 text-black rounded-xl font-semibold transition-colors flex items-center justify-center gap-2"
                     >

@@ -125,7 +125,7 @@ export default function CustomersPage() {
                       <TableRow 
                         key={customer.id} 
                         className={`border-border/40 hover:bg-accent/30 transition-colors cursor-pointer ${selectedCustomer?.id === customer.id ? 'bg-primary/10' : ''}`}
-                        onClick={() => router.push(`/customers/${customer.phone}`)}
+                        onClick={() => router.push(`/customers/${customer.id}`)}
                       >
                         <TableCell>
                           <div className="flex items-center gap-3">

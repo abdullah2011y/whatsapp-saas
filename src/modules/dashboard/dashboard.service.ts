@@ -70,10 +70,11 @@ export const getCustomers = async (userId: string) => {
     orderBy: { createdAt: "desc" }
   });
 
-  // Group by phone to derive unique customers
+  // Group to derive unique customers
   const customerMap = new Map<string, {
     name: string;
     phone: string;
+    email: string | null;
     ordersCount: number;
     totalSpent: number;
     lastOrderDate: Date;
@@ -81,11 +82,22 @@ export const getCustomers = async (userId: string) => {
   }>();
 
   orders.forEach(order => {
-    const key = order.phone;
+    // Generate a unique key for grouping.
+    // Try shopifyCustomerId, then customerEmail, then phone (if it's not "Unknown Phone").
+    // If all are missing/defaults, fall back to "Unknown Phone".
+    let key = order.shopifyCustomerId || order.customerEmail;
+    if (!key && order.phone && order.phone !== "Unknown Phone") {
+      key = order.phone;
+    }
+    if (!key) {
+      key = "Unknown Phone";
+    }
+
     if (!customerMap.has(key)) {
       customerMap.set(key, {
         name: order.customer,
         phone: order.phone,
+        email: order.customerEmail || null,
         ordersCount: 0,
         totalSpent: 0,
         lastOrderDate: order.createdAt,
@@ -101,10 +113,11 @@ export const getCustomers = async (userId: string) => {
     }
   });
 
-  return Array.from(customerMap.entries()).map(([phone, data]) => ({
-    id: phone,
+  return Array.from(customerMap.entries()).map(([key, data]) => ({
+    id: key,
     name: data.name,
     phone: data.phone,
+    email: data.email,
     ordersCount: data.ordersCount,
     totalSpent: data.totalSpent,
     lastOrderDate: data.lastOrderDate,

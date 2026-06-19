@@ -61,7 +61,7 @@ export default function MobileCustomersPage() {
             return (
               <Card 
                 key={customer.id} 
-                onClick={() => router.push(`/customers/${customer.phone}`)}
+                onClick={() => router.push(`/customers/${customer.id}`)}
                 className="bg-gray-900/50 backdrop-blur-md border-gray-800 shadow-sm p-4 flex gap-4 items-center cursor-pointer"
               >
                 <div className="w-10 h-10 rounded-full bg-cyan-500/20 text-cyan-400 flex items-center justify-center flex-shrink-0 font-bold text-sm">

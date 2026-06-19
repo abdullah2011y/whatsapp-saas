@@ -82,13 +82,30 @@ export const handleShopifyOrderCreate = async (payload: any, shopDomain?: string
   }
 
   // Extract customer info
-  const customerName = payload.customer 
-    ? `${payload.customer.first_name || ""} ${payload.customer.last_name || ""}`.trim() 
-    : (payload.shipping_address
-      ? `${payload.shipping_address.first_name || ""} ${payload.shipping_address.last_name || ""}`.trim()
-      : "Unknown Customer");
+  let customerName = "";
+  if (payload.customer) {
+    customerName = `${payload.customer.first_name || ""} ${payload.customer.last_name || ""}`.trim();
+  }
+  if (!customerName && payload.shipping_address) {
+    customerName = `${payload.shipping_address.first_name || ""} ${payload.shipping_address.last_name || ""}`.trim();
+  }
+  if (!customerName && payload.billing_address) {
+    customerName = `${payload.billing_address.first_name || ""} ${payload.billing_address.last_name || ""}`.trim();
+  }
+  if (!customerName) {
+    customerName = "Unknown Customer";
+  }
   
-  const phone = payload.shipping_address?.phone || payload.customer?.phone || payload.phone || "Unknown Phone";
+  let extractedPhone = (
+    payload.shipping_address?.phone || 
+    payload.customer?.phone || 
+    payload.billing_address?.phone || 
+    payload.customer?.default_address?.phone ||
+    payload.phone || 
+    ""
+  ).trim();
+
+  const phone = extractedPhone || "Unknown Phone";
   
   // Extract product info
   const productTitle = payload.line_items?.[0]?.title || "Unknown Product";

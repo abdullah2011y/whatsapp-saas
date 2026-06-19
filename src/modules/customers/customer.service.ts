@@ -7,6 +7,7 @@ export const getCustomerOrders = async (userId: string, idOrPhone: string) => {
       OR: [
         { phone: idOrPhone },
         { shopifyCustomerId: idOrPhone },
+        { customerEmail: idOrPhone },
       ],
     },
     orderBy: { createdAt: "desc" },

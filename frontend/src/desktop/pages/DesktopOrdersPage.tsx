@@ -449,7 +449,8 @@ export default function OrdersPage() {
                   <Button 
                     onClick={() => {
                       closeDetailsModal();
-                      router.push(`/customers/${selectedOrderDetails.phone}`);
+                      const customerId = selectedOrderDetails.shopifyCustomerId || selectedOrderDetails.customerEmail || selectedOrderDetails.phone;
+                      router.push(`/customers/${customerId}`);
                     }}
                     className="bg-cyan-500 hover:bg-cyan-600 text-black font-semibold gap-1.5"
                   >
