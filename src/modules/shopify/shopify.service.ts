@@ -1,54 +1,77 @@
 import prisma from "../../config/database";
 import { triggerAutomation } from "../templates/automation.service";
-
 export const handleShopifyOrderCreate = async (payload: any, shopDomain?: string, userId?: string) => {
   const shopifyOrderId = String(payload.id);
+  
+  console.log(`[Shopify Service] ORDER_CREATE_ATTEMPT: true. Order ID: ${shopifyOrderId}`);
 
   let cleanShopDomain = shopDomain ? shopDomain.trim().toLowerCase().replace(/^(https?:\/\/)?(www\.)?/, "").replace(/\/+$/, "") : undefined;
 
-  // 1. Find Settings by shopifyDomain
+  // 1. Find Settings: Resolve directly by userId first if it exists, otherwise fallback to shopifyDomain
   let settings = null;
-  if (cleanShopDomain) {
+  if (userId) {
+    settings = await prisma.settings.findUnique({
+      where: { userId }
+    });
+  } else if (cleanShopDomain) {
     settings = await prisma.settings.findFirst({
       where: { shopifyDomain: cleanShopDomain }
     });
   }
 
-  // 2. Extract settings.userId
+  // 2. Extract settingsUserId
   const settingsUserId = settings?.userId;
 
-  // If userId is passed via webhook query/routing, we use it for checking, otherwise we use settingsUserId
+  // 3. Resolve userId
   const resolvedUserId = settingsUserId || userId;
 
-  // 3. Verify User exists
+  // 4. Fetch User
   const user = resolvedUserId 
     ? await prisma.user.findUnique({ where: { id: resolvedUserId } }) 
     : null;
 
-  // Diagnostic logs
-  console.log(`Resolved userId: ${resolvedUserId || "undefined"}`);
-  console.log(`Resolved shop domain: ${cleanShopDomain || "undefined"}`);
-  console.log(`User exists: ${!!user}`);
-  console.log(`Settings exists: ${!!settings}`);
+  // Permanent Debug Logs
+  console.log(`[Shopify Service] QUERY_USER_ID: ${userId || "undefined"}`);
+  console.log(`[Shopify Service] SHOP_DOMAIN: ${cleanShopDomain || "undefined"}`);
+  console.log(`[Shopify Service] SETTINGS_FOUND: ${!!settings}`);
+  console.log(`[Shopify Service] SETTINGS_ID: ${settings?.id || "undefined"}`);
+  console.log(`[Shopify Service] SETTINGS_USER_ID: ${settingsUserId || "undefined"}`);
+  console.log(`[Shopify Service] USER_FOUND: ${!!user}`);
+  console.log(`[Shopify Service] USER_ID: ${user?.id || "undefined"}`);
+  console.log(`[Shopify Service] USER_EMAIL: ${user?.email || "undefined"}`);
+  console.log(`[Shopify Service] ORDER_ID: ${shopifyOrderId}`);
 
-  console.log(`Webhook shop domain: ${cleanShopDomain || "undefined"}`);
-  console.log(`Settings found: ${!!settings}`);
-  console.log(`Settings userId: ${settingsUserId || "undefined"}`);
-  console.log(`User found: ${!!user}`);
-  console.log(`Order owner: ${user?.id || "undefined"}`);
-
-  // 4. Verify Settings.userId === User.id (and user exists)
-  // If settings exist, settingsUserId must match the existing user.id.
-  // Since we also want to verify that settingsUserId matches the resolvedUserId (if both exist)
-  const isSettingsOwnerValid = settings && user ? settingsUserId === user.id : true;
-  const isUserValid = !!user;
-
-  if (!isUserValid || !resolvedUserId || !isSettingsOwnerValid || (userId && settingsUserId && userId !== settingsUserId)) {
-    console.error(`[Shopify Webhook] Error: Shopify order import failed. Resolved owner user does not exist or settings mapping is invalid.`);
+  // 5. Multi-Tenant Security Validation & User Existence Checks
+  if (!resolvedUserId) {
+    console.error(`[Shopify Service] Error: No user ID resolved for order sync.`);
     throw new Error("No valid user ownership mapped for this Shopify order");
   }
 
-  // Check for duplicate
+  if (!user) {
+    console.error(`[Shopify Service] Error: User not found for resolved ID ${resolvedUserId}.`);
+    throw new Error("No valid user ownership mapped for this Shopify order");
+  }
+
+  if (settings && settings.userId !== resolvedUserId) {
+    console.error(`[Shopify Service] Tenant isolation error: settings.userId ${settings.userId} does not match resolvedUserId ${resolvedUserId}`);
+    throw new Error(`Tenant isolation error: settings.userId ${settings.userId} does not match resolvedUserId ${resolvedUserId}`);
+  }
+
+  if (user.id !== resolvedUserId) {
+    console.error(`[Shopify Service] Tenant isolation error: user.id ${user.id} does not match resolvedUserId ${resolvedUserId}`);
+    throw new Error(`Tenant isolation error: user.id ${user.id} does not match resolvedUserId ${resolvedUserId}`);
+  }
+
+  if (userId && settingsUserId && userId !== settingsUserId) {
+    console.error(`[Shopify Service] Tenant isolation error: query userId ${userId} does not match settings.userId ${settingsUserId}`);
+    throw new Error(`Tenant isolation error: query userId ${userId} does not match settings.userId ${settingsUserId}`);
+  }
+
+  if (userId && user.id !== userId) {
+    console.error(`[Shopify Service] Tenant isolation error: query userId ${userId} does not match user.id ${user.id}`);
+    throw new Error(`Tenant isolation error: query userId ${userId} does not match user.id ${user.id}`);
+  }
+
   const existingOrder = await prisma.order.findUnique({
     where: { shopifyOrderId } as any,
   });
@@ -116,7 +139,7 @@ export const handleShopifyOrderCreate = async (payload: any, shopDomain?: string
     },
   });
 
-  console.log(`[Shopify Webhook] Prisma save success. Database ID: ${newOrder.id}`);
+  console.log(`[Shopify Service] ORDER_SAVED_SUCCESSFULLY: true. Database ID: ${newOrder.id}`);
 
   // Auto WhatsApp message
   console.log(`[Shopify Webhook] Sending WhatsApp confirmation/automation for order: ${newOrder.id}`);

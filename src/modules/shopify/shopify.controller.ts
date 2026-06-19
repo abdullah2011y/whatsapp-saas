@@ -30,6 +30,32 @@ export const webhookHandler = async (req: Request, res: Response) => {
       }
     }
 
+    const user = userId ? await prisma.user.findUnique({ where: { id: userId } }) : null;
+
+    // Permanent Debug Logs
+    console.log(`[Shopify Webhook] WEBHOOK_URL: ${req.originalUrl || req.url}`);
+    console.log(`[Shopify Webhook] ROUTE_PARAMS:`, JSON.stringify(req.params));
+    console.log(`[Shopify Webhook] QUERY_PARAMS:`, JSON.stringify(req.query));
+    console.log(`[Shopify Webhook] QUERY_USER_ID: ${req.query.userId || "undefined"}`);
+    console.log(`[Shopify Webhook] SHOP_DOMAIN: ${cleanShopDomain || "undefined"}`);
+    console.log(`[Shopify Webhook] SETTINGS_FOUND: ${!!settings}`);
+    console.log(`[Shopify Webhook] SETTINGS_ID: ${settings?.id || "undefined"}`);
+    console.log(`[Shopify Webhook] SETTINGS_USER_ID: ${settings?.userId || "undefined"}`);
+    console.log(`[Shopify Webhook] USER_FOUND: ${!!user}`);
+    console.log(`[Shopify Webhook] USER_ID: ${userId || "undefined"}`);
+    console.log(`[Shopify Webhook] USER_EMAIL: ${user?.email || "undefined"}`);
+
+    // Multi-tenant security validation
+    if (settings && userId && settings.userId !== userId) {
+      console.error(`[Shopify Webhook] Tenant isolation error: query/resolved userId ${userId} does not match settings.userId ${settings.userId}`);
+      throw new Error(`Tenant isolation error: resolved userId ${userId} does not match settings.userId ${settings.userId}`);
+    }
+
+    if (user && userId && user.id !== userId) {
+      console.error(`[Shopify Webhook] Tenant isolation error: query/resolved userId ${userId} does not match user.id ${user.id}`);
+      throw new Error(`Tenant isolation error: resolved userId ${userId} does not match user.id ${user.id}`);
+    }
+
     if (settings && settings.shopifyWebhookSecret) {
       const crypto = await import("crypto");
       const rawBody = (req as any).rawBody;
@@ -68,7 +94,7 @@ export const webhookHandler = async (req: Request, res: Response) => {
       try {
         await handleShopifyOrderCreate(req.body, cleanShopDomain || settings?.shopifyDomain || undefined, userId);
       } catch (err: any) {
-        if (err.message && err.message.includes("No valid user ownership mapped")) {
+        if (err.message && (err.message.includes("No valid user ownership mapped") || err.message.includes("Tenant isolation"))) {
           console.error(`[Shopify Webhook] Rejected webhook payload: ${err.message}`);
           return res.status(400).send(`Bad Request: ${err.message}`);
         }
